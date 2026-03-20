@@ -157,6 +157,29 @@
           {{ 'Verified by Admin ✓' if vstatus.doc_status=='approved' else ('Pending Review' if vstatus.doc_status=='pending' else ('Rejected' if vstatus.doc_status=='rejected' else 'Not Started')) }}
         </span>
       </div>
+      <!-- Step 5: Payment -->
+      <div class="vstep">
+        <div class="vstep-icon {{ 'vi-done' if vstatus.payment_done else 'vi-pending' }}">
+          {{ '✓' if vstatus.payment_done else '💳' }}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.84rem;font-weight:600">Subscription Payment</div>
+          <div style="font-size:.73rem;color:var(--muted)">
+            {% set ps = worker.payment_status | upper %}
+            {% if ps == 'SUCCESS' %}Active — expires {{ worker.subscription_end[:10] if worker.subscription_end else '—' }}
+            {% elif ps == 'EXPIRED' %}Payment window expired
+            {% else %}Complete payment before deadline to activate coverage{% endif %}
+          </div>
+        </div>
+        {% set ps = worker.payment_status | upper %}
+        {% if ps == 'SUCCESS' %}
+          <span class="sb b-act">Active ✓</span>
+        {% elif ps == 'EXPIRED' %}
+          <span class="sb b-off">Expired</span>
+        {% else %}
+          <a href="/payment" class="sb" style="background:var(--gold);color:#0a0e1a;text-decoration:none">Pay Now →</a>
+        {% endif %}
+      </div>
     </div>
     {% if vstatus.doc_status == 'rejected' %}
     <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem .9rem;font-size:.79rem;color:var(--danger);margin-top:.75rem">
@@ -207,7 +230,15 @@
       <div class="gs-card h-100 d-flex flex-column">
         <div class="sh">⚡ File a Claim</div>
         {% if not is_active %}
-        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem;font-size:.79rem;color:var(--danger);margin-bottom:.65rem">❌ No subscription. <a href="/payment" style="color:var(--danger);font-weight:600">Renew →</a></div>
+        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem;font-size:.79rem;color:var(--danger);margin-bottom:.65rem">
+          {% if worker.payment_status | upper == 'PENDING' %}
+            ⏳ Payment pending. <a href="/payment" style="color:var(--danger);font-weight:600">Complete payment →</a>
+          {% elif worker.payment_status | upper == 'EXPIRED' %}
+            ❌ Payment window expired. <a href="/register" style="color:var(--danger);font-weight:600">Re-subscribe →</a>
+          {% else %}
+            ❌ No subscription. <a href="/payment" style="color:var(--danger);font-weight:600">Renew →</a>
+          {% endif %}
+        </div>
         {% endif %}
         {% if vstatus.doc_status == 'pending' %}
         <div style="background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);border-radius:8px;padding:.6rem;font-size:.79rem;color:var(--gold);margin-bottom:.65rem">⏳ Documents under review. Claims enabled after admin approval.</div>
@@ -262,11 +293,19 @@
   <div id="sub" class="gs-card mb-4">
     <div class="sh">🗓️ Subscription</div>
     <div class="row g-3">
-      {% for lbl,val in [('Platform',worker.platform+' (self-declared)'),('Start',worker.subscription_start[:10] if worker.subscription_start else '—'),('End',worker.subscription_end[:10] if worker.subscription_end else '—'),('Days Left',days_left)] %}
-      <div class="col-md-3"><div style="font-size:.73rem;color:var(--muted)">{{ lbl }}</div><div style="font-weight:600;font-size:.9rem">{{ val }}</div></div>
+      {% set ps = worker.payment_status | upper %}
+      {% for lbl,val in [('Platform',worker.platform+' (self-declared)'),('Status', ps),('Start',worker.subscription_start[:10] if worker.subscription_start else '—'),('End',worker.subscription_end[:10] if worker.subscription_end else '—'),('Days Left',days_left),('Deadline',worker.payment_deadline[:16]|replace('T',' ')+' UTC' if worker.payment_deadline else '—')] %}
+      <div class="col-md-3"><div style="font-size:.73rem;color:var(--muted)">{{ lbl }}</div>
+        <div style="font-weight:600;font-size:.9rem;color:{{ 'var(--teal)' if (lbl=='Status' and val=='SUCCESS') else ('var(--gold)' if (lbl=='Status' and val=='PENDING') else ('var(--danger)' if (lbl=='Status' and val=='EXPIRED') else 'inherit')) }}">{{ val }}</div>
+      </div>
       {% endfor %}
     </div>
-    {% if not is_active %}<div class="mt-3"><a href="/payment" class="btn-claim" style="display:inline-block;text-decoration:none;padding:.55rem 1.5rem">🔄 Renew</a></div>{% endif %}
+    {% if ps == 'PENDING' %}
+    <div class="mt-3" style="font-size:.8rem;color:var(--gold)">⏳ Complete payment before deadline to activate coverage.</div>
+    <div class="mt-2"><a href="/payment" class="btn-claim" style="display:inline-block;text-decoration:none;padding:.55rem 1.5rem">💳 Pay Now</a></div>
+    {% elif not is_active %}
+    <div class="mt-3"><a href="/payment" class="btn-claim" style="display:inline-block;text-decoration:none;padding:.55rem 1.5rem">🔄 Renew</a></div>
+    {% endif %}
   </div>
 
   <!-- Chatbot -->

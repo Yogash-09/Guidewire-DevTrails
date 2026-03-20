@@ -12,7 +12,7 @@ from flask import (Blueprint, render_template, request, redirect,
 from database import (
     admin_stats, get_pending_docs, get_worker_by_id,
     admin_review_doc, get_fraud_log, get_fraud_rings,
-    get_suspicious_workers,
+    get_suspicious_workers, get_pending_payment_workers,
 )
 from ml_model import get_income_chart_data
 from auth import admin_required
@@ -57,11 +57,13 @@ def dashboard():
     fraud_logs = get_fraud_log(limit=20)
     rings      = get_fraud_rings()
     suspicious = get_suspicious_workers()
+    pending_payments = get_pending_payment_workers()
     return render_template("admin_dashboard.html",
         stats=stats, pending_docs=pending,
         chart_hours=hours, chart_losses=losses,
         fraud_logs=fraud_logs, fraud_rings=rings,
         suspicious_workers=suspicious,
+        pending_payments=pending_payments,
     )
 
 

@@ -1,0 +1,125 @@
+{% extends "_base_user.html" %}
+{% block title %}My Claims — GigShield AI{% endblock %}
+
+{% block content %}
+<div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;margin-bottom:1rem">📋 My Claims</div>
+
+<!-- Claim trigger -->
+<div class="gs-card">
+  <div class="gs-card-title">⚡ File a Claim</div>
+
+  {% set ps = (worker.payment_status or 'PENDING') | upper %}
+  {% if not is_active %}
+  <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem .85rem;font-size:.8rem;color:var(--danger);margin-bottom:.75rem">
+    {% if ps == 'PENDING' %}⏳ Payment pending. <a href="{{ url_for('user.subscription') }}" style="color:var(--danger);font-weight:600">Complete payment →</a>
+    {% elif ps == 'EXPIRED' %}❌ Payment expired. <a href="{{ url_for('user.subscription') }}" style="color:var(--danger);font-weight:600">Re-subscribe →</a>
+    {% else %}❌ No active subscription. <a href="{{ url_for('user.subscription') }}" style="color:var(--danger);font-weight:600">Subscribe →</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if vstatus.doc_status == 'pending' %}
+  <div style="background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);border-radius:8px;padding:.6rem .85rem;font-size:.8rem;color:var(--gold);margin-bottom:.75rem">
+    ⏳ Documents under admin review. Claims enabled after approval.
+  </div>
+  {% elif vstatus.doc_status == 'rejected' %}
+  <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem .85rem;font-size:.8rem;color:var(--danger);margin-bottom:.75rem">
+    ❌ Documents rejected. <a href="/upload-docs" style="color:var(--danger)">Re-upload →</a>
+  </div>
+  {% endif %}
+
+  <div style="margin-bottom:.75rem">
+    <label style="font-size:.76rem;color:var(--muted);display:block;margin-bottom:.3rem">Estimated lost hours</label>
+    <input type="range" id="hrs" min="0.5" max="10" step="0.5" value="3"
+           style="width:100%;accent-color:var(--teal)" oninput="updEst()"/>
+    <div style="display:flex;justify-content:space-between;font-size:.7rem;color:var(--muted);margin-top:.2rem">
+      <span>0.5h</span><span id="hrsLbl" style="color:var(--teal);font-weight:600">3h</span><span>10h</span>
+    </div>
+  </div>
+
+  <div style="background:var(--s2);border-radius:8px;padding:.65rem .85rem;margin-bottom:.75rem">
+    <div style="font-size:.72rem;color:var(--muted)">ML Predicted Payout</div>
+    <div style="font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;color:var(--teal)" id="estPay">₹270</div>
+  </div>
+
+  <button class="btn-teal w-100" id="claimBtn"
+          {{ 'disabled' if not is_active else '' }}
+          onclick="triggerClaim()">
+    {{ '🔒 Subscription Required' if not is_active else '⚡ Trigger Claim' }}
+  </button>
+  <div id="claimMsg" style="margin-top:.6rem;font-size:.78rem;color:var(--muted);text-align:center"></div>
+</div>
+
+<!-- Claim history -->
+<div class="gs-card">
+  <div class="gs-card-title">📜 Claim History</div>
+  {% if claims %}
+  <div style="overflow-x:auto">
+    <table style="width:100%;border-collapse:separate;border-spacing:0">
+      <thead>
+        <tr>
+          {% for h in ['Date','Event','Hrs','Payout','Status'] %}
+          <th style="font-size:.68rem;color:var(--muted);font-weight:600;padding:.4rem .5rem;border-bottom:1px solid var(--bd);text-transform:uppercase;letter-spacing:.4px;white-space:nowrap">{{ h }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in claims %}
+        <tr>
+          <td style="font-size:.76rem;padding:.45rem .5rem;border-bottom:1px solid var(--bd);white-space:nowrap">{{ c.claim_date[:10] }}</td>
+          <td style="font-size:.76rem;padding:.45rem .5rem;border-bottom:1px solid var(--bd)">{{ c.weather_event or '—' }}</td>
+          <td style="font-size:.76rem;padding:.45rem .5rem;border-bottom:1px solid var(--bd)">{{ c.lost_hours }}h</td>
+          <td style="font-size:.76rem;padding:.45rem .5rem;border-bottom:1px solid var(--bd);color:var(--teal);font-weight:600">
+            {{ '₹'+'%.0f'|format(c.payout) if c.payout > 0 else '—' }}
+          </td>
+          <td style="padding:.45rem .5rem;border-bottom:1px solid var(--bd)">
+            <span class="sb {{ 'b-act' if c.status=='approved' else ('b-warn' if c.status=='review' else 'b-off') }}" style="font-size:.65rem">
+              {{ c.status | upper }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">
+    No claims yet. Claims appear here after a weather disruption.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function updEst(){
+  const h=parseFloat(document.getElementById('hrs').value);
+  document.getElementById('hrsLbl').textContent=h+'h';
+  try{
+    const r=await fetch('/api/income-predict?hours='+h);
+    const d=await r.json();
+    document.getElementById('estPay').textContent='₹'+Math.round(d.predicted_loss);
+  }catch{document.getElementById('estPay').textContent='₹'+Math.round(h*90);}
+}
+async function triggerClaim(){
+  const btn=document.getElementById('claimBtn');
+  btn.disabled=true;btn.textContent='⏳ Processing…';
+  const h=parseFloat(document.getElementById('hrs').value);
+  const fd=new FormData();
+  fd.append('lost_hours',h);fd.append('gps_variance','55');
+  fd.append('distance_km','80');fd.append('login_frequency','2');fd.append('avg_daily_hours','6');
+  try{
+    const r=await fetch('{{ url_for("user.trigger_claim") }}',{method:'POST',body:fd});
+    const d=await r.json();
+    const msg=document.getElementById('claimMsg');
+    msg.textContent=d.message;
+    msg.style.color=d.status==='approved'?'var(--teal)':(d.status==='rejected'?'var(--danger)':'var(--gold)');
+    setTimeout(()=>location.reload(),2500);
+  }catch{
+    document.getElementById('claimMsg').textContent='❌ Network error.';
+    btn.disabled=false;btn.textContent='⚡ Trigger Claim';
+  }
+}
+updEst();
+</script>
+{% endblock %}

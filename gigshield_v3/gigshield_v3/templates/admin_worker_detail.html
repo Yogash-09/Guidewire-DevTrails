@@ -118,8 +118,18 @@
     <!-- Subscription & Risk -->
     <div class="mb-2">
       <div style="font-size:.72rem;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.5rem">Subscription & Risk</div>
+      <div class="row-item">
+        <span class="lbl">Payment Status</span>
+        {% set ps = (worker.payment_status or 'PENDING') | upper %}
+        <span class="bp {{ 'bg' if ps=='SUCCESS' else ('bo' if ps=='PENDING' else 'br') }}">{{ ps }}</span>
+      </div>
+      <div class="row-item">
+        <span class="lbl">Subscription Status</span>
+        {% set ss = (worker.subscription_status or 'INACTIVE') | upper %}
+        <span class="bp {{ 'bg' if ss=='ACTIVE' else 'br' }}">{{ ss }}</span>
+      </div>
       {% for lbl, val in [
-        ('Payment Status', worker.payment_status),
+        ('Payment Deadline', worker.payment_deadline[:16] | replace('T',' ') + ' UTC' if worker.payment_deadline else '—'),
         ('Premium', '₹' + (worker.premium | int | string)),
         ('Coverage', '₹' + (worker.coverage | int | string)),
         ('Subscription Start', worker.subscription_start[:10] if worker.subscription_start else '—'),

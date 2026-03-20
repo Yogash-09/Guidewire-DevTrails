@@ -26,6 +26,7 @@ from anti_spoofing import (
     check_rules_detail, REJECT_STATUSES, SUSPICIOUS_STATUSES, STATUS_REASONS
 )
 from auth import user_required
+from qr_generator import generate_qr
 
 user_bp = Blueprint("user", __name__, url_prefix="/user")
 claim_logger = logging.getLogger("gigshield.claims")
@@ -40,11 +41,11 @@ def _vstatus(w: dict) -> dict:
         "email_verified": bool(w.get("email_verified")),
         "docs_uploaded":  bool(w.get("id_card_path") or w.get("app_screenshot_path")),
         "doc_status":     w.get("doc_status", "not_uploaded"),
-        "payment_done":   w.get("payment_status") == "paid",
+        "payment_done":   w.get("payment_status") == "SUCCESS",
         "fully_verified": (
             bool(w.get("email_verified")) and
             w.get("doc_status") == "approved" and
-            w.get("payment_status") == "paid"
+            w.get("payment_status") == "SUCCESS"
         ),
     }
 
@@ -114,48 +115,115 @@ def logout():
     return redirect(url_for("role_select"))
 
 
-# ── Dashboard ─────────────────────────────────────────────────────
+# ── Shared worker loader ─────────────────────────────────────────
+
+def _load_worker():
+    """Load worker dict from session, return None if not found."""
+    w = get_worker_by_id(session.get("user_id"))
+    return dict(w) if w else None
+
+
+def _base_ctx(w: dict) -> dict:
+    """Common template context shared across all user pages."""
+    email = w.get("email", "")
+    return dict(
+        worker=w,
+        worker_name=w.get("name", ""),
+        is_active=subscription_active(email),
+        days_left=days_remaining(email),
+        vstatus=_vstatus(w),
+    )
+
+
+# ── Dashboard (legacy redirect) ───────────────────────────────────
 
 @user_bp.route("/dashboard")
 @user_required
 def dashboard():
-    w = get_worker_by_id(session["user_id"])
+    return redirect(url_for("user.home"))
+
+
+# ── Home ──────────────────────────────────────────────────────────
+
+@user_bp.route("/home")
+@user_required
+def home():
+    w = _load_worker()
     if not w:
         session.clear()
         return redirect(url_for("role_select"))
-    w = dict(w)
-    email = w.get("email", "")
+    ctx = _base_ctx(w)
+    ctx["weather"]       = get_weather(w.get("city", ""))
+    ctx["predicted_loss"] = predict_income_loss(3)
+    ctx["active_page"]   = "home"
+    return render_template("user_home.html", **ctx)
 
-    is_active = subscription_active(email)
-    days_left = days_remaining(email)
-    claims    = get_worker_claims(email)
-    weather   = get_weather(w.get("city", ""))
-    pred_loss = predict_income_loss(3)
-    cpw       = count_claims_this_week(email)
-    ring      = is_fraud_ring(w.get("device_id", ""), w["id"])
 
-    fraud = check_fraud({
-        "claims_per_week":    cpw,
-        "avg_daily_hours":    6.0,
-        "gps_variance":       float(w.get("fraud_score", 0) * 500),
-        "distance_travelled": 80.0,
-        "weather_match":      1,
-        "login_frequency":    float(cpw * 2 + 1),
-        "has_subscription":   is_active,
-        "is_fraud_ring":      ring,
-    })
-    update_fraud_score(email, fraud["risk_score"], _risk_label(fraud["risk_score"]))
+# ── Verification ──────────────────────────────────────────────────
 
-    return render_template("worker_dashboard.html",
-        worker=w, is_active=is_active, days_left=days_left,
-        claims=claims, weather=weather, predicted_loss=pred_loss,
-        risk_score=fraud["risk_score"],
-        risk_label=_risk_label(fraud["risk_score"]),
-        fraud_data=fraud,
-        expiry_warning=(0 < days_left <= 2 and is_active),
-        is_fraud_ring=ring,
-        vstatus=_vstatus(w),
-    )
+@user_bp.route("/verification")
+@user_required
+def verification():
+    w = _load_worker()
+    if not w:
+        session.clear()
+        return redirect(url_for("role_select"))
+    ctx = _base_ctx(w)
+    ctx["active_page"] = "verification"
+    return render_template("user_verification.html", **ctx)
+
+
+# ── Claims page ───────────────────────────────────────────────────
+
+@user_bp.route("/claims")
+@user_required
+def claims():
+    w = _load_worker()
+    if not w:
+        session.clear()
+        return redirect(url_for("role_select"))
+    ctx = _base_ctx(w)
+    ctx["claims"]      = get_worker_claims(w.get("email", ""))
+    ctx["active_page"] = "claims"
+    return render_template("user_claims.html", **ctx)
+
+
+# ── Subscription page ─────────────────────────────────────────────
+
+@user_bp.route("/subscription")
+@user_required
+def subscription():
+    w = _load_worker()
+    if not w:
+        session.clear()
+        return redirect(url_for("role_select"))
+    ctx = _base_ctx(w)
+    ctx["qr_file"]     = generate_qr(float(w.get("premium", 49)), str(w["id"]))
+    ctx["active_page"] = "subscription"
+    return render_template("user_subscription.html", **ctx)
+
+
+# ── AI Assistant page ─────────────────────────────────────────────
+
+@user_bp.route("/assistant")
+@user_required
+def assistant():
+    w = _load_worker()
+    if not w:
+        session.clear()
+        return redirect(url_for("role_select"))
+    ctx = _base_ctx(w)
+    ctx["active_page"] = "assistant"
+    return render_template("user_assistant.html", **ctx)
+
+
+# ── Skip payment ──────────────────────────────────────────────────
+
+@user_bp.route("/skip-payment")
+@user_required
+def skip_payment():
+    flash("⏳ Payment skipped. Complete it before your deadline to activate coverage.", "info")
+    return redirect(url_for("user.home"))
 
 
 # ── Claim ─────────────────────────────────────────────────────────
@@ -172,8 +240,14 @@ def trigger_claim():
 
     # Step 1: Subscription
     if not subscription_active(email):
-        return jsonify({"status": "rejected",
-                        "message": "❌ No active subscription. Please renew."}), 403
+        pay_status = w.get("payment_status", "PENDING")
+        if pay_status == "PENDING":
+            msg = "⏳ Subscription inactive — payment pending. Complete payment before deadline."
+        elif pay_status == "EXPIRED":
+            msg = "❌ Payment window expired. Please re-subscribe to continue coverage."
+        else:
+            msg = "❌ No active subscription. Please renew."
+        return jsonify({"status": "rejected", "message": msg}), 403
 
     # Step 2: Doc status
     if w.get("doc_status") == "pending":

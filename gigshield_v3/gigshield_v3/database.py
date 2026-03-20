@@ -50,9 +50,11 @@ def init_db():
             doc_reviewed_at      TEXT    DEFAULT '',
 
             -- Subscription
-            payment_status       TEXT    DEFAULT 'pending',
+            payment_status       TEXT    DEFAULT 'PENDING',
+            subscription_status  TEXT    DEFAULT 'INACTIVE',
             subscription_start   TEXT    DEFAULT '',
             subscription_end     TEXT    DEFAULT '',
+            payment_deadline     TEXT    DEFAULT '',
             premium              REAL    DEFAULT 0,
             coverage             REAL    DEFAULT 0,
 
@@ -129,6 +131,12 @@ def init_db():
         if "otp_verified" not in cols:
             c.execute("ALTER TABLE workers ADD COLUMN otp_verified INTEGER DEFAULT 0")
             print("[DB] Migration: otp_verified column added")
+        if "payment_deadline" not in cols:
+            c.execute("ALTER TABLE workers ADD COLUMN payment_deadline TEXT DEFAULT ''")
+            print("[DB] Migration: payment_deadline column added")
+        if "subscription_status" not in cols:
+            c.execute("ALTER TABLE workers ADD COLUMN subscription_status TEXT DEFAULT 'INACTIVE'")
+            print("[DB] Migration: subscription_status column added")
 
     print(f"[DB] Ready -> {DB_PATH}")
 
@@ -169,16 +177,21 @@ def create_worker(data: dict) -> int:
     pm = {"swiggy": 49.0, "zomato": 59.0}
     premium  = pm.get(data.get("platform","").lower(), 39.0)
     coverage = premium * 20
+    now      = datetime.utcnow()
+    deadline = now + timedelta(hours=24)
     with get_conn() as c:
         cur = c.execute(
             """INSERT INTO workers
-               (name,city,platform,worker_ref_id,email,device_id,premium,coverage)
-               VALUES (?,?,?,?,?,?,?,?)""",
+               (name,city,platform,worker_ref_id,email,device_id,premium,coverage,
+                payment_status,subscription_status,subscription_start,payment_deadline)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
             (data["name"], data["city"], data["platform"],
              data.get("worker_ref_id",""),
              data["email"].lower().strip(),
              data.get("device_id",""),
-             premium, coverage)
+             premium, coverage,
+             "PENDING", "INACTIVE",
+             now.isoformat(), deadline.isoformat())
         )
         if data.get("device_id"):
             c.execute(
@@ -246,14 +259,37 @@ def get_pending_docs():
 
 # ── Subscription ──────────────────────────────────────────────────
 
-def activate_subscription(email: str):
-    s = datetime.utcnow()
-    e = s + timedelta(days=7)
+def activate_subscription(email: str) -> dict:
+    """Activate if within deadline, else mark EXPIRED. Returns result dict."""
+    email = email.lower().strip()
     with get_conn() as c:
-        c.execute(
-            "UPDATE workers SET payment_status='paid', subscription_start=?, subscription_end=? WHERE email=?",
-            (s.isoformat(), e.isoformat(), email.lower().strip())
-        )
+        r = c.execute(
+            "SELECT payment_deadline FROM workers WHERE email=?", (email,)
+        ).fetchone()
+    now = datetime.utcnow()
+    try:
+        deadline = datetime.fromisoformat(r["payment_deadline"]) if r and r["payment_deadline"] else now
+    except Exception:
+        deadline = now
+
+    if now <= deadline:
+        end = now + timedelta(days=7)
+        with get_conn() as c:
+            c.execute(
+                """UPDATE workers
+                   SET payment_status='SUCCESS', subscription_status='ACTIVE',
+                       subscription_end=?
+                   WHERE email=?""",
+                (end.isoformat(), email)
+            )
+        return {"result": "SUCCESS", "subscription_end": end.isoformat()}
+    else:
+        with get_conn() as c:
+            c.execute(
+                "UPDATE workers SET payment_status='EXPIRED', subscription_status='INACTIVE' WHERE email=?",
+                (email,)
+            )
+        return {"result": "EXPIRED"}
 
 def subscription_active(email: str) -> bool:
     with get_conn() as c:
@@ -261,11 +297,19 @@ def subscription_active(email: str) -> bool:
             "SELECT subscription_end, payment_status FROM workers WHERE email=?",
             (email.lower().strip(),)
         ).fetchone()
-    if not r or r["payment_status"] != "paid": return False
+    if not r or r["payment_status"] != "SUCCESS": return False
     try:
         return datetime.utcnow() <= datetime.fromisoformat(r["subscription_end"])
     except Exception:
         return False
+
+def get_pending_payment_workers() -> list:
+    """Return workers with PENDING payment for reminder checks."""
+    with get_conn() as c:
+        rows = c.execute(
+            "SELECT email, name, payment_deadline FROM workers WHERE payment_status='PENDING'"
+        ).fetchall()
+    return [dict(r) for r in rows]
 
 def days_remaining(email: str) -> int:
     with get_conn() as c:
@@ -339,7 +383,7 @@ def admin_stats() -> dict:
     with get_conn() as c:
         tw   = c.execute("SELECT COUNT(*) FROM workers").fetchone()[0]
         ev   = c.execute("SELECT COUNT(*) FROM workers WHERE email_verified=1").fetchone()[0]
-        sub  = c.execute("SELECT COUNT(*) FROM workers WHERE payment_status='paid'").fetchone()[0]
+        sub  = c.execute("SELECT COUNT(*) FROM workers WHERE payment_status='SUCCESS'").fetchone()[0]
         tc   = c.execute("SELECT COUNT(*) FROM claims").fetchone()[0]
         frd  = c.execute("SELECT COUNT(*) FROM claims WHERE status='rejected'").fetchone()[0]
         rev  = c.execute("SELECT COUNT(*) FROM claims WHERE status='review'").fetchone()[0]

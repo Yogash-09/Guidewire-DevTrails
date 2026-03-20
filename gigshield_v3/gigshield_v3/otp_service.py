@@ -281,3 +281,45 @@ def send_otp_phone(phone: str, otp: str) -> dict:
         "channel": "console",
         "message": "OTP generated. Check terminal (SMS not configured).",
     }
+
+
+def send_email(to_email: str, subject: str, message: str) -> bool:
+    """
+    Reusable email sender for reminders / alerts.
+    Returns True on success, False on failure (falls back to console print).
+    """
+    user = os.environ.get("GMAIL_USER", "").strip()
+    pwd  = os.environ.get("GMAIL_PASS", "").strip().replace(" ", "")
+
+    if not (user and pwd):
+        print(f"[EMAIL] (console fallback) To: {to_email} | Subject: {subject}\n{message}")
+        return False
+
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"]    = f"GigShield AI <{user}>"
+    msg["To"]      = to_email
+    msg.attach(MIMEText(message, "plain"))
+
+    for port, use_ssl in [(587, False), (465, True)]:
+        try:
+            if use_ssl:
+                with smtplib.SMTP_SSL("smtp.gmail.com", port, timeout=15) as smtp:
+                    smtp.login(user, pwd)
+                    smtp.sendmail(user, [to_email], msg.as_string())
+            else:
+                with smtplib.SMTP("smtp.gmail.com", port, timeout=15) as smtp:
+                    smtp.ehlo(); smtp.starttls(); smtp.ehlo()
+                    smtp.login(user, pwd)
+                    smtp.sendmail(user, [to_email], msg.as_string())
+            print(f"[EMAIL] Sent -> {to_email} | {subject}")
+            return True
+        except Exception as e:
+            print(f"[EMAIL] Port {port} failed: {e}")
+
+    print(f"[EMAIL] (console fallback) To: {to_email} | Subject: {subject}\n{message}")
+    return False

@@ -47,6 +47,42 @@ def _block_admin_on_worker_port():
     if port == "5000" and request.path.startswith("/admin"):
         abort(404)
 
+
+@app.before_request
+def _check_payment_reminders():
+    """Periodic reminder: runs on each request but throttled by a simple in-process set."""
+    from datetime import datetime, timedelta
+    import threading
+    _lock = getattr(_check_payment_reminders, "_lock", None)
+    if _lock is None:
+        _check_payment_reminders._lock = threading.Lock()
+        _check_payment_reminders._last_run = None
+    with _check_payment_reminders._lock:
+        now = datetime.utcnow()
+        last = _check_payment_reminders._last_run
+        if last and (now - last).total_seconds() < 3600:  # run at most once per hour
+            return
+        _check_payment_reminders._last_run = now
+
+    for w in get_pending_payment_workers():
+        try:
+            deadline = datetime.fromisoformat(w["payment_deadline"])
+        except Exception:
+            continue
+        now = datetime.utcnow()
+        if now >= deadline:
+            send_email(
+                w["email"],
+                "Subscription Expired — GigShield AI",
+                "Your payment window has expired. Please re-subscribe to continue coverage."
+            )
+        elif now >= deadline - timedelta(hours=6):
+            send_email(
+                w["email"],
+                "Payment Reminder — GigShield AI",
+                "Your subscription payment is pending. Please complete payment within the allowed time to activate coverage."
+            )
+
 # ── Shared / legacy routes ────────────────────────────────────────
 
 @app.route("/")
@@ -86,8 +122,9 @@ from database import (
     worker_exists_by_email, create_worker, get_worker_by_email,
     update_otp, verify_otp_db, activate_subscription,
     subscription_active, days_remaining, save_doc_paths,
+    get_pending_payment_workers,
 )
-from otp_service import send_otp, generate_otp
+from otp_service import send_otp, generate_otp, send_email
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
@@ -192,13 +229,27 @@ def payment():
 
 @app.route("/payment/confirm", methods=["POST"])
 def payment_confirm():
-    email = session.get("reg_email", "")
+    email = session.get("reg_email", "") or session.get("worker_email", "")
     if not email:
         return redirect(url_for("register"))
-    activate_subscription(email)
-    session["worker_email"] = email
-    session.pop("reg_email", None)
-    flash("🎉 Subscription activated! Welcome to GigShield AI.", "success")
+    result = activate_subscription(email)
+    if result["result"] == "SUCCESS":
+        session["worker_email"] = email
+        session.pop("reg_email", None)
+        flash("🎉 Payment confirmed! Subscription activated for 7 days.", "success")
+        return redirect(url_for("worker_dashboard"))
+    else:
+        flash("❌ Payment window expired. Please re-register to get a new payment window.", "danger")
+        return redirect(url_for("payment"))
+
+
+@app.route("/payment/skip")
+def payment_skip():
+    email = session.get("reg_email", "")
+    if email:
+        session["worker_email"] = email
+        session.pop("reg_email", None)
+    flash("⏳ Payment skipped. Complete it before your deadline to activate coverage.", "info")
     return redirect(url_for("worker_dashboard"))
 
 @app.route("/login", methods=["GET", "POST"])
@@ -245,47 +296,15 @@ def trigger_claim():
 @app.route("/dashboard")
 @_login_required
 def worker_dashboard():
-    from database import (get_worker_claims, count_claims_this_week,
-                          update_fraud_score, is_fraud_ring)
-    from ml_model import check_fraud, predict_income_loss
-
-    def _risk_label(s): return "HIGH" if s >= 0.65 else ("MEDIUM" if s >= 0.35 else "LOW")
-    def _vstatus(w): return {
-        "email_verified": bool(w.get("email_verified")),
-        "docs_uploaded":  bool(w.get("id_card_path") or w.get("app_screenshot_path")),
-        "doc_status":     w.get("doc_status", "not_uploaded"),
-        "payment_done":   w.get("payment_status") == "paid",
-        "fully_verified": bool(w.get("email_verified")) and w.get("doc_status") == "approved" and w.get("payment_status") == "paid",
-    }
-
-    email = session["worker_email"]
-    w = get_worker_by_email(email)
+    # Legacy email-session path: bridge into user blueprint
+    from database import get_worker_by_email as _gwe
+    w = _gwe(session["worker_email"])
     if not w:
         session.clear()
         return redirect(url_for("role_select"))
-    w = dict(w)
-    is_active = subscription_active(email)
-    days_left = days_remaining(email)
-    claims    = get_worker_claims(email)
-    weather   = get_weather(w["city"])
-    pred_loss = predict_income_loss(3)
-    cpw       = count_claims_this_week(email)
-    ring      = is_fraud_ring(w.get("device_id", ""), w["id"])
-    fraud = check_fraud({
-        "claims_per_week": cpw, "avg_daily_hours": 6.0,
-        "gps_variance": float(w.get("fraud_score", 0) * 500),
-        "distance_travelled": 80.0, "weather_match": 1,
-        "login_frequency": float(cpw * 2 + 1),
-        "has_subscription": is_active, "is_fraud_ring": ring,
-    })
-    update_fraud_score(email, fraud["risk_score"], _risk_label(fraud["risk_score"]))
-    return render_template("worker_dashboard.html",
-        worker=w, is_active=is_active, days_left=days_left,
-        claims=claims, weather=weather, predicted_loss=pred_loss,
-        risk_score=fraud["risk_score"], risk_label=_risk_label(fraud["risk_score"]),
-        fraud_data=fraud, expiry_warning=(0 < days_left <= 2 and is_active),
-        is_fraud_ring=ring, vstatus=_vstatus(w),
-    )
+    session["user_id"] = w["id"]
+    session["role"] = "user"
+    return redirect(url_for("user.home"))
 
 # ── Chatbot & utility APIs ────────────────────────────────────────
 

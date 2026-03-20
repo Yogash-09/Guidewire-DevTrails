@@ -1,0 +1,99 @@
+{% extends "_base_user.html" %}
+{% block title %}Home — GigShield AI{% endblock %}
+
+{% block content %}
+<!-- Welcome -->
+<div style="margin-bottom:1rem">
+  <div style="font-size:.8rem;color:var(--muted)">Welcome back 👋</div>
+  <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem">{{ worker.name.split()[0] }}</div>
+  <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ worker.city }} · {{ worker.platform }}</div>
+</div>
+
+<!-- Status banner -->
+{% set ps = (worker.payment_status or 'PENDING') | upper %}
+{% if ps == 'SUCCESS' and is_active %}
+<div style="background:rgba(0,201,167,.1);border:1px solid rgba(0,201,167,.3);border-radius:12px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
+  <div>
+    <div style="font-weight:700;font-size:.88rem;color:var(--teal)">✅ Coverage Active</div>
+    <div style="font-size:.74rem;color:var(--muted)">{{ days_left }} day{{ 's' if days_left != 1 else '' }} remaining</div>
+  </div>
+  <span class="sb b-act">ACTIVE</span>
+</div>
+{% elif ps == 'PENDING' %}
+<div style="background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.3);border-radius:12px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
+  <div>
+    <div style="font-weight:700;font-size:.88rem;color:var(--gold)">⏳ Payment Pending</div>
+    <div style="font-size:.74rem;color:var(--muted)">Complete payment to activate coverage</div>
+  </div>
+  <a href="{{ url_for('user.subscription') }}" style="background:var(--gold);color:#0a0e1a;border-radius:999px;padding:.3rem .85rem;font-size:.75rem;font-weight:700;text-decoration:none">Pay →</a>
+</div>
+{% else %}
+<div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.3);border-radius:12px;padding:.75rem 1rem;margin-bottom:1rem;display:flex;align-items:center;justify-content:space-between">
+  <div>
+    <div style="font-weight:700;font-size:.88rem;color:var(--danger)">❌ Inactive</div>
+    <div style="font-size:.74rem;color:var(--muted)">{{ 'Payment expired' if ps == 'EXPIRED' else 'No active subscription' }}</div>
+  </div>
+  <a href="{{ url_for('user.subscription') }}" style="background:var(--danger);color:#fff;border-radius:999px;padding:.3rem .85rem;font-size:.75rem;font-weight:700;text-decoration:none">Renew →</a>
+</div>
+{% endif %}
+
+<!-- Stats grid -->
+<div class="row g-2 mb-3">
+  <div class="col-6"><div class="stat-tile">
+    <div class="stat-val" style="color:var(--teal)">₹{{ worker.premium | int }}</div>
+    <div class="stat-lbl">Weekly Premium</div>
+  </div></div>
+  <div class="col-6"><div class="stat-tile">
+    <div class="stat-val">₹{{ worker.coverage | int }}</div>
+    <div class="stat-lbl">Coverage</div>
+  </div></div>
+  <div class="col-6"><div class="stat-tile">
+    <div class="stat-val" style="color:{{ 'var(--gold)' if days_left <= 2 else 'var(--text)' }}">{{ days_left }}d</div>
+    <div class="stat-lbl">Days Left</div>
+  </div></div>
+  <div class="col-6"><div class="stat-tile">
+    <div class="stat-val" style="color:var(--gold)">₹{{ predicted_loss | int }}</div>
+    <div class="stat-lbl">ML Est. (3h)</div>
+  </div></div>
+</div>
+
+<!-- Weather card -->
+<div class="gs-card">
+  <div class="gs-card-title">🌤️ Weather — {{ worker.city }}</div>
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <span style="font-size:2rem">{{ '🌧️' if weather.is_disrupted else '☀️' }}</span>
+    <div>
+      <div style="font-weight:600;font-size:.9rem">{{ weather.condition }}</div>
+      <div style="font-size:.74rem;color:var(--muted)">{{ weather.temperature }}°C · {{ weather.source }}</div>
+    </div>
+    {% if weather.is_disrupted %}
+    <span class="sb b-off ms-auto">Disrupted</span>
+    {% endif %}
+  </div>
+  {% if weather.is_disrupted %}
+  <div style="margin-top:.65rem;font-size:.78rem;color:var(--danger);background:rgba(255,71,87,.07);border-radius:8px;padding:.5rem .75rem">
+    ⚠️ Disruption detected — <a href="{{ url_for('user.claims') }}" style="color:var(--danger);font-weight:600">file a claim →</a>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Quick links -->
+<div class="row g-2">
+  <div class="col-6">
+    <a href="{{ url_for('user.claims') }}" style="text-decoration:none">
+      <div class="gs-card" style="text-align:center;padding:.9rem">
+        <div style="font-size:1.5rem">📋</div>
+        <div style="font-size:.8rem;font-weight:600;margin-top:.3rem">My Claims</div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6">
+    <a href="{{ url_for('user.verification') }}" style="text-decoration:none">
+      <div class="gs-card" style="text-align:center;padding:.9rem">
+        <div style="font-size:1.5rem">✅</div>
+        <div style="font-size:.8rem;font-weight:600;margin-top:.3rem">Verification</div>
+      </div>
+    </a>
+  </div>
+</div>
+{% endblock %}

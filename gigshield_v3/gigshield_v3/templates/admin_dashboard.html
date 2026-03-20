@@ -37,6 +37,7 @@
 <div class="sidebar">
   <div class="logo mb-4">Gig<span>Shield</span> Admin</div>
   <a href="/admin/dashboard" class="ni act">📊 Overview</a>
+  <a href="#pending-payments" class="ni">💳 Pending Payments {% if pending_payments %}<span style="background:var(--gold);color:#0a0e1a;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ pending_payments|length }}</span>{% endif %}</a>
   <a href="#doc-review" class="ni">📄 Doc Review {% if stats.pending_docs > 0 %}<span style="background:var(--danger);color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ stats.pending_docs }}</span>{% endif %}</a>
   <a href="#fraud-rings" class="ni">🕵️ Fraud Rings {% if fraud_rings %}<span style="background:var(--danger);color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ fraud_rings|length }}</span>{% endif %}</a>
   <a href="#suspicious" class="ni">⚠️ Suspicious {% if suspicious_workers %}<span style="background:var(--gold);color:#0a0e1a;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ suspicious_workers|length }}</span>{% endif %}</a>
@@ -102,6 +103,35 @@
       </div>
       {% endfor %}
     </div>
+  </div>
+
+  <!-- Pending Payments -->
+  <div id="pending-payments" class="gs-card mb-4" style="border-color:rgba(245,166,35,.3)">
+    <div class="sh" style="color:var(--gold)">💳 Pending Payments
+      {% if pending_payments %}<span class="bp bo">{{ pending_payments|length }} pending</span>{% endif %}
+    </div>
+    {% if pending_payments %}
+    <div style="background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:10px;padding:.6rem 1rem;margin-bottom:.75rem;font-size:.81rem;color:var(--gold)">
+      ⏳ These workers registered but have not completed payment yet. Reminder emails are sent automatically within 6 hours of their deadline.
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Email</th><th>Payment Deadline (UTC)</th><th>Time Left</th></tr></thead>
+        <tbody>
+          {% for w in pending_payments %}
+          <tr>
+            <td style="font-weight:500">{{ w.name }}</td>
+            <td style="font-size:.76rem">{{ w.email }}</td>
+            <td style="font-size:.76rem;color:var(--gold)">{{ w.payment_deadline[:16] | replace('T',' ') if w.payment_deadline else '—' }}</td>
+            <td style="font-size:.76rem" id="tl-{{ loop.index }}" data-deadline="{{ w.payment_deadline }}">—</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No pending payments. ✅</div>
+    {% endif %}
   </div>
 
   <!-- Document Review Queue -->
@@ -203,7 +233,12 @@
                   {{ w.doc_status or 'none' }}
                 </span>
               </td>
-              <td><span class="bp {{ 'bg' if w.payment_status=='paid' else 'bm' }}">{{ 'Active' if w.payment_status=='paid' else 'No' }}</span></td>
+              <td>
+                {% set ps = (w.payment_status or 'PENDING') | upper %}
+                <span class="bp {{ 'bg' if ps=='SUCCESS' else ('bo' if ps=='PENDING' else 'br') }}">
+                  {{ 'Active' if ps=='SUCCESS' else ('Pending' if ps=='PENDING' else 'Expired') }}
+                </span>
+              </td>
               <td>
                 {% set fs=(w.fraud_score or 0)*100 %}
                 <span style="color:{{ 'var(--teal)' if fs<35 else ('var(--gold)' if fs<65 else 'var(--danger)') }};font-weight:600">{{ fs|int }}%</span>
@@ -360,6 +395,21 @@
 
 <script>
   setInterval(()=>document.getElementById('lt').textContent=new Date().toLocaleTimeString('en-IN'),1000);
+
+  // Countdown timers for pending payment deadlines
+  function updateCountdowns(){
+    document.querySelectorAll('[data-deadline]').forEach(el=>{
+      const dl=new Date(el.dataset.deadline+'Z');
+      const diff=dl-Date.now();
+      if(diff<=0){el.textContent='Expired';el.style.color='var(--danger)';return;}
+      const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000);
+      el.textContent=h+'h '+m+'m left';
+      el.style.color=h<6?'var(--danger)':'var(--gold)';
+    });
+  }
+  updateCountdowns();
+  setInterval(updateCountdowns,60000);
+
   Chart.defaults.color='#8b949e';Chart.defaults.font.family="'DM Sans',sans-serif";
   const grid='rgba(48,54,61,0.8)';
 
