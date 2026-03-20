@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Register — GigShield AI</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root{--teal:#00c9a7;--ink:#0a0e1a;--muted:#6b7280;--gold:#f5a623;}
+  body{background:#f7f5f0;font-family:'DM Sans',sans-serif;min-height:100vh;padding-bottom:2rem}
+  body::before{content:'';position:fixed;inset:0;z-index:-1;
+    background:radial-gradient(ellipse 70% 50% at 10% -10%,rgba(0,201,167,.10),transparent),#f7f5f0}
+  nav{background:#fff;border-bottom:1px solid rgba(0,0,0,.06);padding:.75rem 1.5rem}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--ink);text-decoration:none}
+  .logo span{color:var(--teal)}
+  .card{background:#fff;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,.08);padding:2rem;max-width:540px;margin:1.5rem auto}
+  .form-label{font-size:.83rem;font-weight:500;color:var(--ink);margin-bottom:.3rem}
+  .form-control,.form-select{border-radius:10px;border:1.5px solid #e5e7eb;padding:.6rem .9rem;font-size:.9rem;transition:border-color .2s}
+  .form-control:focus,.form-select:focus{border-color:var(--teal);box-shadow:0 0 0 3px rgba(0,201,167,.12);outline:none}
+  .step-num{width:26px;height:26px;border-radius:50%;background:var(--teal);color:#fff;
+    display:inline-flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:700;margin-right:.5rem;flex-shrink:0}
+  .step-title{font-family:'Syne',sans-serif;font-weight:700;font-size:.92rem;color:var(--ink)}
+  .plat-btn{border:2px solid #e5e7eb;border-radius:12px;padding:.7rem .9rem;cursor:pointer;
+    text-align:center;transition:all .2s;background:#fff;flex:1}
+  .plat-btn:hover,.plat-btn.sel{border-color:var(--teal);background:rgba(0,201,167,.06)}
+  .plat-btn input{display:none}
+  .honest-badge{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.3);
+    border-radius:10px;padding:.6rem .9rem;font-size:.78rem;color:#92400e;margin-top:.5rem}
+  .btn-go{background:var(--ink);color:#fff;border:none;border-radius:999px;padding:.7rem 2rem;
+    font-weight:600;width:100%;font-size:.95rem;transition:transform .2s;margin-top:.25rem}
+  .btn-go:hover{transform:translateY(-2px)}
+  .alert{border-radius:10px;font-size:.86rem}
+  .divider{height:1px;background:#f3f4f6;margin:1.25rem 0}
+</style>
+</head>
+<body>
+<nav class="d-flex justify-content-between align-items-center">
+  <a href="/" class="logo">Gig<span>Shield</span> AI</a>
+  <a href="/" style="font-size:.82rem;color:var(--muted);text-decoration:none">← Back</a>
+</nav>
+
+<div class="container">
+  {% with msgs=get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}
+    <div class="alert alert-{{ 'success' if cat=='success' else ('info' if cat=='info' else 'danger') }} alert-dismissible fade show mx-auto mt-3" style="max-width:540px">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="card">
+    <div class="text-center mb-3">
+      <div style="font-size:2.2rem">🛵</div>
+      <h2 style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem;color:var(--ink);margin:.3rem 0">Create Your Account</h2>
+      <p style="font-size:.83rem;color:var(--muted)">3-step verification: Email OTP → Documents → Admin Review</p>
+    </div>
+
+    <form method="POST" action="/register" id="regForm">
+      <!-- Step 1: Platform (self-declared) -->
+      <div class="mb-3">
+        <div class="d-flex align-items-center mb-2">
+          <span class="step-num">1</span><span class="step-title">Platform Affiliation</span>
+        </div>
+        <div class="d-flex gap-2">
+          {% for p,icon,price in [('Swiggy','🧡','₹49/wk'),('Zomato','❤️','₹59/wk'),('Other','🚴','₹39/wk')] %}
+          <label class="plat-btn" id="lbl-{{p.lower()}}">
+            <input type="radio" name="platform" value="{{ p }}" required onclick="document.getElementById('lbl-{{p.lower()}}').classList.add('sel');['swiggy','zomato','other'].filter(x=>x!='{{p.lower()}}').forEach(x=>document.getElementById('lbl-'+x).classList.remove('sel'))"/>
+            <div style="font-size:1.4rem">{{ icon }}</div>
+            <div style="font-weight:600;font-size:.86rem">{{ p }}</div>
+            <div style="font-size:.72rem;color:var(--muted)">{{ price }}</div>
+          </label>
+          {% endfor %}
+        </div>
+        <div class="honest-badge mt-2">
+          ⚠️ <strong>Self-declared affiliation.</strong> We do not have API access to Swiggy/Zomato databases.
+          Your affiliation will be verified by our admin team after you upload proof documents.
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Step 2: Personal Info -->
+      <div class="mb-3">
+        <div class="d-flex align-items-center mb-2">
+          <span class="step-num">2</span><span class="step-title">Personal Information</span>
+        </div>
+        <div class="row g-2">
+          <div class="col-md-6">
+            <label class="form-label">Full Name</label>
+            <input type="text" name="name" class="form-control" placeholder="Hari Hari"
+                   value="{{ form_data.name if form_data else '' }}" required/>
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">City</label>
+            <select name="city" class="form-select" required>
+              <option value="" disabled selected>Select city</option>
+              {% for c in ['Mumbai','Delhi','Bengaluru','Chennai','Kolkata','Hyderabad','Pune','Ahmedabad','Jaipur','Lucknow'] %}
+              <option {{ 'selected' if form_data and form_data.city==c }}>{{ c }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Reference / Rider ID <span style="color:var(--muted);font-size:.75rem">(optional — your delivery app ID for reference)</span></label>
+            <input type="text" name="worker_ref_id" class="form-control" placeholder="e.g. SW12345 or ZM67890 (optional)"
+                   value="{{ form_data.worker_ref_id if form_data else '' }}"/>
+            <div style="font-size:.73rem;color:var(--muted);margin-top:.25rem">
+              This is for your reference only. We cannot verify it against Swiggy/Zomato databases.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Step 3: Email -->
+      <div class="mb-3">
+        <div class="d-flex align-items-center mb-2">
+          <span class="step-num">3</span><span class="step-title">Email Verification</span>
+        </div>
+        <label class="form-label">Email Address</label>
+        <input type="email" name="email" class="form-control" placeholder="you@gmail.com"
+               value="{{ form_data.email if form_data else '' }}" required/>
+        <div style="font-size:.73rem;color:var(--muted);margin-top:.25rem">
+          📧 A 6-digit OTP will be sent to this email. No phone number needed.
+        </div>
+      </div>
+
+      <!-- Terms -->
+      <div class="mb-3">
+        <div class="form-check">
+          <input class="form-check-input" type="checkbox" id="tc" required/>
+          <label class="form-check-label" for="tc" style="font-size:.8rem;color:var(--muted)">
+            I agree to the <a href="/terms" target="_blank" style="color:var(--teal)">Terms & Conditions</a> and understand that
+            platform affiliation is self-declared and subject to admin verification. Coverage is for income loss only.
+          </label>
+        </div>
+      </div>
+
+      <input type="hidden" name="device_id" id="device_id"/>
+      <button type="submit" class="btn-go">Send Verification OTP →</button>
+    </form>
+
+    <div class="text-center mt-3" style="font-size:.82rem;color:var(--muted)">
+      Already registered? <a href="/login" style="color:var(--teal);font-weight:500">Log in →</a>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  document.getElementById('device_id').value =
+    'DEV_' + navigator.userAgent.length + '_' + screen.width + 'x' + screen.height + '_' + new Date().getTimezoneOffset();
+</script>
+</body>
+</html>

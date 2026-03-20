@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GigShield AI — Protect Your Earnings</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root{--ink:#0a0e1a;--paper:#f7f5f0;--teal:#00c9a7;--gold:#f5a623;--muted:#6b7280;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'DM Sans',sans-serif;background:var(--paper);min-height:100vh;overflow-x:hidden}
+  body::before{content:'';position:fixed;inset:0;z-index:-1;
+    background:radial-gradient(ellipse 80% 50% at 20% -20%,rgba(0,201,167,.12),transparent),
+               radial-gradient(ellipse 60% 60% at 80% 110%,rgba(245,166,35,.10),transparent),var(--paper)}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.35rem;color:var(--ink)}
+  .logo span{color:var(--teal)}
+  .hero-tag{display:inline-block;padding:.25rem .75rem;background:rgba(0,201,167,.12);color:var(--teal);
+    border:1px solid rgba(0,201,167,.3);border-radius:999px;font-size:.78rem;font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+  h1{font-family:'Syne',sans-serif;font-size:clamp(2.4rem,6vw,4rem);font-weight:800;color:var(--ink);line-height:1.1;letter-spacing:-1.5px}
+  h1 .accent{color:var(--teal)}
+  .hero-sub{font-size:1.05rem;color:var(--muted);max-width:480px;line-height:1.7}
+  .chip{padding:.28rem .8rem;border-radius:999px;background:#f3f4f6;color:#374151;font-size:.77rem;font-weight:500;display:inline-block;margin:.15rem}
+  .chip.g{background:rgba(0,201,167,.1);color:var(--teal)}
+  .stat-bar{display:flex;gap:1.5rem;flex-wrap:wrap;margin-top:2.5rem}
+  .stat-num{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800;color:var(--ink)}
+  .stat-lbl{font-size:.76rem;color:var(--muted)}
+  .div-v{width:1px;height:40px;background:#e5e7eb;align-self:center}
+  .role-card{background:#fff;border:2px solid transparent;border-radius:20px;padding:2.5rem 2rem;
+    text-align:center;cursor:pointer;transition:transform .25s,border-color .25s,box-shadow .25s;
+    box-shadow:0 4px 24px rgba(0,0,0,.06);text-decoration:none;color:inherit;display:block}
+  .role-card:hover{transform:translateY(-6px);border-color:var(--teal);box-shadow:0 16px 40px rgba(0,201,167,.18)}
+  .role-card.admin:hover{border-color:var(--gold);box-shadow:0 16px 40px rgba(245,166,35,.18)}
+  .role-icon{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 1.2rem}
+  .ri-w{background:rgba(0,201,167,.12)}.ri-a{background:rgba(245,166,35,.12)}
+  .role-pill{display:inline-block;margin-top:1.2rem;padding:.45rem 1.2rem;border-radius:999px;font-size:.85rem;font-weight:600}
+  .rp-w{background:var(--teal);color:#fff}.rp-a{background:var(--gold);color:#fff}
+  .rt{font-family:'Syne',sans-serif;font-size:1.3rem;font-weight:700;color:var(--ink);margin-bottom:.35rem}
+  .shield-bg{width:clamp(260px,38vw,360px);height:clamp(260px,38vw,360px);border-radius:50%;
+    background:linear-gradient(135deg,rgba(0,201,167,.08),rgba(245,166,35,.06));
+    display:flex;align-items:center;justify-content:center;
+    animation:pulse 3s ease-in-out infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 40px rgba(0,201,167,.04)}50%{box-shadow:0 0 0 60px rgba(0,201,167,.07)}}
+  .badge-fl{position:absolute;background:#fff;border-radius:14px;padding:.5rem .9rem;
+    box-shadow:0 8px 24px rgba(0,0,0,.10);font-size:.8rem;font-weight:600;color:var(--ink);
+    display:flex;align-items:center;gap:.4rem;animation:fl 4s ease-in-out infinite}
+  @keyframes fl{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--teal)}
+  .dot.g{background:var(--gold)}
+  .step-card{background:#fff;border-radius:16px;padding:1.5rem;text-align:center;box-shadow:0 2px 12px rgba(0,0,0,.05)}
+  .alert{border-radius:12px;font-size:.9rem}
+</style>
+</head>
+<body>
+<nav class="py-3 px-4" style="border-bottom:1px solid rgba(0,0,0,.06);background:rgba(247,245,240,.9);backdrop-filter:blur(8px);position:sticky;top:0;z-index:50">
+  <div class="container d-flex justify-content-between align-items-center">
+    <div class="logo">Gig<span>Shield</span> AI</div>
+    <div class="d-flex gap-3 align-items-center">
+      <a href="/terms" style="font-size:.83rem;color:var(--muted);text-decoration:none">Terms</a>
+      <a href="/login" style="background:var(--ink);color:#fff;border-radius:999px;padding:.35rem 1rem;font-size:.83rem;text-decoration:none">Returning Worker →</a>
+    </div>
+  </div>
+</nav>
+
+<div class="container mt-3">
+  {% with msgs=get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}
+    <div class="alert alert-{{ 'success' if cat=='success' else ('info' if cat=='info' else 'danger') }} alert-dismissible fade show">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+</div>
+
+<div class="container py-5">
+  <div class="row align-items-center gy-5">
+    <div class="col-lg-6">
+      <div class="hero-tag mb-3">🛡️ India's #1 Gig Worker Income Insurance</div>
+      <h1>Your income.<br><span class="accent">Shielded</span> by AI.</h1>
+      <p class="hero-sub mt-3">Automated parametric insurance for Swiggy & Zomato delivery partners across India. Triggered instantly when weather disrupts your earnings — no paperwork, no delay.</p>
+      <div class="mt-3">
+        <span class="chip g">✅ Weather-triggered</span><span class="chip g">✅ ML Fraud Detection</span>
+        <span class="chip g">✅ Device Fingerprinting</span><span class="chip">₹49–₹59/week</span><span class="chip">7-day coverage</span>
+      </div>
+      <div class="stat-bar">
+        <div class="stat"><div class="stat-num">12k+</div><div class="stat-lbl">Workers Protected</div></div>
+        <div class="div-v"></div>
+        <div class="stat"><div class="stat-num">₹2.4Cr</div><div class="stat-lbl">Claims Paid</div></div>
+        <div class="div-v"></div>
+        <div class="stat"><div class="stat-num">98%</div><div class="stat-lbl">Auto-Approved</div></div>
+        <div class="div-v"></div>
+        <div class="stat"><div class="stat-num">&lt;5m</div><div class="stat-lbl">Payout Time</div></div>
+      </div>
+    </div>
+    <div class="col-lg-6 d-flex justify-content-center" style="position:relative">
+      <div class="shield-bg"><span style="font-size:clamp(5rem,10vw,8rem)">🛡️</span></div>
+      <div class="badge-fl" style="top:8%;right:8%;animation-delay:.3s"><div class="dot"></div> Claim Approved ✅</div>
+      <div class="badge-fl" style="bottom:16%;left:5%;animation-delay:.8s"><div class="dot g"></div> ₹270 Payout 💸</div>
+      <div class="badge-fl" style="top:50%;right:3%;animation-delay:1.4s">🌧️ Rain · Mumbai</div>
+    </div>
+  </div>
+
+  <div class="row mt-5 pt-2">
+    <div class="col-12 text-center mb-4">
+      <h2 style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.6rem;color:var(--ink)">How are you joining?</h2>
+      <p style="color:var(--muted);font-size:.9rem">Select your role to continue</p>
+    </div>
+    <div class="col-md-5 mx-auto mb-3">
+      <a href="/register" class="role-card">
+        <div class="role-icon ri-w">🛵</div>
+        <div class="rt">I'm a Gig Worker</div>
+        <p style="font-size:.88rem;color:var(--muted)">Swiggy or Zomato partner protecting weekly income from weather disruptions.</p>
+        <div><span class="chip">Register</span><span class="chip">Dashboard</span><span class="chip">Claims</span></div>
+        <div class="role-pill rp-w mt-3">Get Protected →</div>
+      </a>
+    </div>
+    <div class="col-md-5 mx-auto mb-3">
+      <a href="/admin/login" class="role-card admin">
+        <div class="role-icon ri-a">📊</div>
+        <div class="rt">I'm an Admin</div>
+        <p style="font-size:.88rem;color:var(--muted)">Platform admin for claims management, fraud monitoring, and ML analytics.</p>
+        <div><span class="chip">Analytics</span><span class="chip">Fraud Monitor</span><span class="chip">ML Graphs</span></div>
+        <div class="role-pill rp-a mt-3">Admin Panel →</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="row mt-5">
+    <div class="col-12 text-center mb-4">
+      <h2 style="font-family:'Syne',sans-serif;font-weight:700;font-size:1.45rem">How it works</h2>
+    </div>
+    {% for s in [('1','🪪','Register & Verify','Platform ID + real SMS OTP via Twilio'),
+                 ('2','💳','Subscribe via UPI','Scan QR · Pay ₹49–59 · Coverage starts instantly'),
+                 ('3','🌦️','Disruption Detected','AI monitors weather in your city in real-time'),
+                 ('4','💸','Auto Claim + Payout','ML + rules verify. UPI payout in under 5 min')] %}
+    <div class="col-md-3 col-6 mb-3">
+      <div class="step-card">
+        <div style="font-size:2rem;margin-bottom:.5rem">{{ s[1] }}</div>
+        <div style="font-size:.68rem;font-weight:700;color:var(--teal);text-transform:uppercase;letter-spacing:1px">Step {{ s[0] }}</div>
+        <div style="font-family:'Syne',sans-serif;font-weight:700;font-size:.95rem;margin:.25rem 0">{{ s[2] }}</div>
+        <div style="font-size:.78rem;color:var(--muted)">{{ s[3] }}</div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
+<footer class="py-4 mt-2" style="border-top:1px solid #e5e7eb;text-align:center;font-size:.8rem;color:var(--muted)">
+  © 2024 GigShield AI · Made in India 🇮🇳 · <a href="/terms" style="color:var(--muted)">Terms</a>
+</footer>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body></html>

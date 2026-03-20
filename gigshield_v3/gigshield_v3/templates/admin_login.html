@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Admin — GigShield AI</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans&display=swap" rel="stylesheet"/>
+<style>
+  :root{--bg:#0d1117;--surface:#161b22;--border:#30363d;--gold:#f5a623;--text:#e6edf3;--muted:#8b949e;}
+  body{background:var(--bg);font-family:'DM Sans',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:1rem}
+  body::before{content:'';position:fixed;inset:0;z-index:-1;background:radial-gradient(ellipse 60% 50% at 50% 0%,rgba(245,166,35,.08),transparent)}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:24px;padding:2.5rem 2rem;max-width:400px;width:100%}
+  .form-control{background:var(--bg);border:1.5px solid var(--border);border-radius:12px;color:var(--text);padding:.65rem 1rem;font-size:.92rem}
+  .form-control:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(245,166,35,.12);background:var(--bg);color:var(--text);outline:none}
+  .btn-a{background:var(--gold);color:#0a0e1a;border:none;border-radius:999px;padding:.75rem;font-weight:700;width:100%;font-size:1rem;transition:transform .2s}
+  .btn-a:hover{transform:translateY(-2px)}
+  .alert{border-radius:12px;font-size:.85rem}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="text-center mb-4">
+    <div style="font-size:2.2rem">🔐</div>
+    <h2 style="font-family:'Syne',sans-serif;font-weight:800;color:var(--text);font-size:1.5rem;margin:.4rem 0">Admin Access</h2>
+    <p style="font-size:.83rem;color:var(--muted)">GigShield AI Platform</p>
+  </div>
+  {% with msgs=get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}<div class="alert alert-danger mb-3">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+  <form method="POST" action="/admin/login">
+    <div class="mb-4">
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem">Admin Password</label>
+      <input type="password" name="password" class="form-control" placeholder="Enter password" required autofocus/>
+    </div>
+    <button type="submit" class="btn-a">Enter Dashboard →</button>
+  </form>
+  <div class="text-center mt-3"><a href="/" style="font-size:.8rem;color:var(--muted);text-decoration:none">← Home</a></div>
+  <div style="margin-top:1.5rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);border-radius:10px;padding:.65rem;text-align:center;font-size:.75rem;color:var(--muted)">
+    Demo: <code style="color:var(--gold)">admin123</code>
+  </div>
+</div>
+</body></html>
