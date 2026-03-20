@@ -28,7 +28,7 @@
     <div class="alert alert-{{ 'success' if cat=='success' else ('info' if cat=='info' else 'danger') }} mb-3">{{ msg }}</div>
     {% endfor %}
   {% endwith %}
-  <form method="POST" action="/login">
+  <form method="POST">
     <div class="mb-4">
       <label style="font-size:.83rem;font-weight:500;color:var(--ink);display:block;margin-bottom:.3rem">Email Address</label>
       <input type="email" name="email" class="form-control" placeholder="you@gmail.com" required autofocus/>

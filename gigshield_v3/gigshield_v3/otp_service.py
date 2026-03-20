@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 try:
     from dotenv import load_dotenv
     load_dotenv(override=True)
+    print("[OTP] .env loaded")
 except ImportError:
     pass
 
@@ -106,10 +107,10 @@ _ensure_table()
 def _check_gmail_config():
     user = os.environ.get("GMAIL_USER", "").strip()
     pwd  = os.environ.get("GMAIL_PASS", "").strip()
-    if user and pwd:
-        print(f"[OTP] Gmail ready → {user} ✅")
+    if user and pwd and user != "your_email@gmail.com":
+        print(f"[OTP] Gmail ready -> {user}")
     else:
-        print("[OTP] ⚠️  Gmail not configured — OTP printing to console")
+        print("[OTP] Gmail not configured -- OTP printing to console")
         print("[OTP]    Fix: add GMAIL_USER and GMAIL_PASS to .env")
 
 _check_gmail_config()
@@ -159,7 +160,7 @@ def _gmail(to_email: str, otp: str, name: str) -> tuple[bool, str]:
 
     last_error = ""
 
-    # ── Try port 587 with STARTTLS first (works on most networks) ────
+    # Try port 587 STARTTLS
     try:
         with smtplib.SMTP("smtp.gmail.com", 587, timeout=15) as smtp:
             smtp.ehlo()
@@ -167,36 +168,36 @@ def _gmail(to_email: str, otp: str, name: str) -> tuple[bool, str]:
             smtp.ehlo()
             smtp.login(user, pwd)
             smtp.sendmail(user, [to_email], msg.as_string())
-        print(f"[OTP] ✅ Email sent via port 587 → {to_email}")
+        print(f"[OTP] Email sent via port 587 -> {to_email}")
         return True, "sent"
     except Exception as e:
         last_error = str(e)
-        print(f"[OTP] Port 587 failed → {e}  (trying port 465…)")
+        print(f"[OTP] Port 587 failed -> {last_error} (trying 465...)")
 
-    # ── Fall back to port 465 SSL ────────────────────────────────────
+    # Fall back to port 465 SSL
     try:
         with smtplib.SMTP_SSL("smtp.gmail.com", 465, timeout=15) as smtp:
             smtp.login(user, pwd)
             smtp.sendmail(user, [to_email], msg.as_string())
-        print(f"[OTP] ✅ Email sent via port 465 → {to_email}")
+        print(f"[OTP] Email sent via port 465 -> {to_email}")
         return True, "sent"
     except Exception as e:
         last_error = str(e)
-        print(f"[OTP] Port 465 failed → {e}")
+        print(f"[OTP] Port 465 failed -> {last_error}")
 
-    print(f"[OTP] ❌ Both ports failed. Error: {last_error}")
+    print(f"[OTP] Both ports failed. Last error: {last_error}")
     return False, last_error
 
 def _console_fallback(email: str, otp: str):
     print()
     print("=" * 56)
-    print("  GigShield AI — OTP  (CONSOLE / DEV MODE)")
+    print("  GigShield AI -- OTP  (CONSOLE / DEV MODE)")
     print("=" * 56)
-    print(f"  📧 Email   : {email}")
-    print(f"  🔑 OTP     : {otp}")
-    print(f"  ⏱  Expires : {OTP_EXPIRY_MINUTES} minutes")
+    print(f"  Email   : {email}")
+    print(f"  OTP     : {otp}")
+    print(f"  Expires : {OTP_EXPIRY_MINUTES} minutes")
     print()
-    print("  → Set GMAIL_USER + GMAIL_PASS to send real emails")
+    print("  Set GMAIL_USER + GMAIL_PASS to send real emails")
     print("=" * 56)
     print()
 
@@ -235,8 +236,8 @@ def send_otp(email: str, otp: str, worker_id: str = "", name: str = "Worker") ->
     return {
         "success": True,
         "channel": "console",
-        "message": f"OTP generated. Configure Gmail to send real emails.",
-        "debug_otp": "",       # OTP is in terminal only, never returned to browser
+        "message": "OTP generated. Configure Gmail to send real emails.",
+        "debug_otp": otp,   # shown on-screen in dev mode only
         "warning": warning,
     }
 
@@ -257,3 +258,26 @@ def verify_otp_expiry(email: str, entered: str) -> tuple[bool, str]:
     with _conn() as c:
         c.execute("UPDATE otp_log SET used=1 WHERE id=?", (row["id"],))
     return True, "OTP verified."
+
+
+# ── Phone OTP (console fallback — plug in Twilio/MSG91 here) ──────
+
+def send_otp_phone(phone: str, otp: str) -> dict:
+    """
+    Send OTP to a phone number.
+    Currently prints to console. Replace _sms() body with your SMS provider.
+    """
+    print()
+    print("=" * 50)
+    print("  GigShield AI — PHONE OTP (CONSOLE / DEV MODE)")
+    print("=" * 50)
+    print(f"  📱 Phone : {phone}")
+    print(f"  🔑 OTP   : {otp}")
+    print(f"  ⏱  Valid : {OTP_EXPIRY_MINUTES} minutes")
+    print("=" * 50)
+    print()
+    return {
+        "success": True,
+        "channel": "console",
+        "message": "OTP generated. Check terminal (SMS not configured).",
+    }

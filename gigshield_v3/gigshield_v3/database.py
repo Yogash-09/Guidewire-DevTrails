@@ -117,20 +117,53 @@ def init_db():
         );
         """)
 
-    # Non-destructive migration: add trust_score if not yet present
+    # Non-destructive migrations
     with get_conn() as c:
         cols = [r[1] for r in c.execute("PRAGMA table_info(workers)").fetchall()]
         if "trust_score" not in cols:
             c.execute("ALTER TABLE workers ADD COLUMN trust_score INTEGER DEFAULT 100")
-            print("[DB] Migration: trust_score column added ✅")
+            print("[DB] Migration: trust_score column added")
+        if "phone_number" not in cols:
+            c.execute("ALTER TABLE workers ADD COLUMN phone_number TEXT DEFAULT ''")
+            print("[DB] Migration: phone_number column added")
+        if "otp_verified" not in cols:
+            c.execute("ALTER TABLE workers ADD COLUMN otp_verified INTEGER DEFAULT 0")
+            print("[DB] Migration: otp_verified column added")
 
-    print(f"[DB] Ready → {DB_PATH}")
+    print(f"[DB] Ready -> {DB_PATH}")
 
 # ── Workers ───────────────────────────────────────────────────────
 
 def worker_exists_by_email(email: str) -> bool:
     with get_conn() as c:
         return c.execute("SELECT id FROM workers WHERE email=?", (email,)).fetchone() is not None
+
+def worker_exists_by_phone(phone: str) -> bool:
+    with get_conn() as c:
+        return c.execute("SELECT id FROM workers WHERE phone_number=?", (phone.strip(),)).fetchone() is not None
+
+def get_worker_by_phone(phone: str):
+    with get_conn() as c:
+        return c.execute("SELECT * FROM workers WHERE phone_number=?", (phone.strip(),)).fetchone()
+
+def update_otp_phone(phone: str, otp: str):
+    """Store OTP against a phone number."""
+    with get_conn() as c:
+        c.execute("UPDATE workers SET otp_code=?, otp_verified=0 WHERE phone_number=?",
+                  (otp, phone.strip()))
+
+def verify_otp_phone(phone: str, entered: str):
+    """Verify OTP for phone login. Returns worker row on success, None on failure."""
+    with get_conn() as c:
+        row = c.execute(
+            "SELECT * FROM workers WHERE phone_number=?", (phone.strip(),)
+        ).fetchone()
+    if row and str(row["otp_code"]).strip() == str(entered).strip():
+        with get_conn() as c:
+            c.execute("UPDATE workers SET otp_verified=1 WHERE phone_number=?",
+                      (phone.strip(),))
+        return row
+    return None
 
 def create_worker(data: dict) -> int:
     pm = {"swiggy": 49.0, "zomato": 59.0}

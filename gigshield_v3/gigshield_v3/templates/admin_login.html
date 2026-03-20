@@ -28,15 +28,19 @@
     {% for cat,msg in msgs %}<div class="alert alert-danger mb-3">{{ msg }}</div>{% endfor %}
   {% endwith %}
   <form method="POST" action="/admin/login">
+    <div class="mb-3">
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem">Username</label>
+      <input type="text" name="username" class="form-control" placeholder="admin" required autofocus/>
+    </div>
     <div class="mb-4">
-      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem">Admin Password</label>
-      <input type="password" name="password" class="form-control" placeholder="Enter password" required autofocus/>
+      <label style="font-size:.82rem;color:var(--muted);display:block;margin-bottom:.3rem">Password</label>
+      <input type="password" name="password" class="form-control" placeholder="Enter password" required/>
     </div>
     <button type="submit" class="btn-a">Enter Dashboard →</button>
   </form>
   <div class="text-center mt-3"><a href="/" style="font-size:.8rem;color:var(--muted);text-decoration:none">← Home</a></div>
   <div style="margin-top:1.5rem;background:rgba(245,166,35,.07);border:1px solid rgba(245,166,35,.2);border-radius:10px;padding:.65rem;text-align:center;font-size:.75rem;color:var(--muted)">
-    Demo: <code style="color:var(--gold)">admin123</code>
+    Demo: <code style="color:var(--gold)">admin</code> / <code style="color:var(--gold)">1234</code>
   </div>
 </div>
 </body></html>
