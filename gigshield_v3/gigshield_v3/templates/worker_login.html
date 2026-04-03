@@ -23,18 +23,24 @@
     <h2 style="font-family:'Syne',sans-serif;font-weight:800;color:var(--ink);font-size:1.45rem;margin:.3rem 0">Welcome Back</h2>
     <p style="font-size:.82rem;color:#6b7280">Enter your registered email to access your dashboard</p>
   </div>
+
   {% with msgs=get_flashed_messages(with_categories=true) %}
     {% for cat,msg in msgs %}
     <div class="alert alert-{{ 'success' if cat=='success' else ('info' if cat=='info' else 'danger') }} mb-3">{{ msg }}</div>
     {% endfor %}
   {% endwith %}
+
   <form method="POST">
     <div class="mb-4">
       <label style="font-size:.83rem;font-weight:500;color:var(--ink);display:block;margin-bottom:.3rem">Email Address</label>
-      <input type="email" name="email" class="form-control" placeholder="you@gmail.com" required autofocus/>
+      <input type="email" name="email" class="form-control"
+             placeholder="you@gmail.com"
+             autocomplete="email"
+             required autofocus/>
     </div>
     <button type="submit" class="btn-l">Access Dashboard →</button>
   </form>
+
   <div class="text-center mt-3" style="font-size:.81rem;color:#6b7280">
     New worker? <a href="/register" style="color:var(--teal);font-weight:500">Register →</a>
   </div>

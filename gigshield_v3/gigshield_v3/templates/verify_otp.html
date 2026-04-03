@@ -25,8 +25,8 @@
 </head>
 <body>
 <div class="card text-center">
-  <div style="font-size:2.2rem">📧</div>
-  <h2 style="font-family:'Syne',sans-serif;font-weight:800;color:var(--ink);margin:.4rem 0">Verify Your Email</h2>
+  <div style="font-size:2.2rem">📱</div>
+  <h2 style="font-family:'Syne',sans-serif;font-weight:800;color:var(--ink);margin:.4rem 0">Verify Your Phone</h2>
   <p style="font-size:.83rem;color:#6b7280">Enter the 6-digit OTP sent to</p>
   <p style="font-size:.88rem;font-weight:600;color:var(--teal)">{{ phone or email }}</p>
 
@@ -87,7 +87,7 @@
 
   async function resend(){
     rb.disabled=true;rb.textContent='Sending...';
-    const r=await fetch('/send_otp',{method:'POST'});
+    const r=await fetch('{{ url_for("user.send_otp_route") }}',{method:'POST'});
     const d=await r.json();
     const st=document.getElementById('chStatus');
     if(d.channel==='email'){

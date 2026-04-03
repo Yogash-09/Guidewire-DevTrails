@@ -20,6 +20,13 @@ from ml_model import ensure_models_trained, predict_income_loss
 from weather_service import get_weather
 from chatbot import get_response
 from qr_generator import generate_qr
+from database import (
+    worker_exists_by_email, create_worker, get_worker_by_email,
+    update_otp, verify_otp_db, activate_subscription,
+    subscription_active, days_remaining, save_doc_paths,
+    get_pending_payment_workers,
+)
+from otp_service import send_otp, generate_otp, send_email
 
 from routes_user  import user_bp
 from routes_admin import admin_bp
@@ -117,14 +124,6 @@ def _login_required(f):
             return redirect(url_for("role_select"))
         return f(*a, **k)
     return w
-
-from database import (
-    worker_exists_by_email, create_worker, get_worker_by_email,
-    update_otp, verify_otp_db, activate_subscription,
-    subscription_active, days_remaining, save_doc_paths,
-    get_pending_payment_workers,
-)
-from otp_service import send_otp, generate_otp, send_email
 
 @app.route("/register", methods=["GET", "POST"])
 def register():

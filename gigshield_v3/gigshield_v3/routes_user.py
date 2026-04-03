@@ -19,7 +19,9 @@ from database import (
     mark_fraud_ring_workers,
 )
 from ml_model import predict_income_loss, check_fraud
-from weather_service import get_weather, weather_triggers_claim
+from weather_service import get_weather
+from disruption_service import check_disruption, get_city_risk_level
+from triggers import calculate_premium, weather_trigger, pollution_trigger, traffic_trigger
 from otp_service import generate_otp, send_otp_phone
 from fraud_model import predict_fraud_full
 from anti_spoofing import (
@@ -50,63 +52,31 @@ def _vstatus(w: dict) -> dict:
     }
 
 
-# ── Login (phone + OTP) ───────────────────────────────────────────
+# ── Login (email) ───────────────────────────────────────────────
 
 @user_bp.route("/login", methods=["GET", "POST"])
 def login():
     if session.get("role") == "user":
-        return redirect(url_for("user.dashboard"))
+        return redirect(url_for("user.home"))
     if request.method == "POST":
-        phone = request.form.get("phone", "").strip()
-        if not phone:
-            flash("Phone number is required.", "danger")
+        from database import worker_exists_by_email, get_worker_by_email
+        email = request.form.get("email", "").strip().lower()
+        if not email or "@" not in email:
+            flash("Valid email address is required.", "danger")
             return render_template("worker_login.html")
-        if not worker_exists_by_phone(phone):
-            flash("Phone number not registered. Please register first.", "danger")
+        if not worker_exists_by_email(email):
+            flash("Email not found. Please register first.", "danger")
             return render_template("worker_login.html")
-        otp = generate_otp()
-        update_otp_phone(phone, otp)
-        result = send_otp_phone(phone, otp)
-        session["otp_phone"] = phone
-        if result.get("success"):
-            flash(f"OTP sent to {phone}.", "success")
-        else:
-            flash("OTP generated. Check terminal (SMS not configured).", "info")
-        return redirect(url_for("user.verify_otp"))
+        w = get_worker_by_email(email)
+        if not w["email_verified"]:
+            session["reg_email"] = email
+            flash("Please complete email verification first.", "warning")
+            return redirect(url_for("verify_otp_route"))
+        session["user_id"] = w["id"]
+        session["role"] = "user"
+        flash("✅ Logged in successfully.", "success")
+        return redirect(url_for("user.home"))
     return render_template("worker_login.html")
-
-
-@user_bp.route("/send_otp", methods=["POST"])
-def send_otp_route():
-    phone = session.get("otp_phone", "")
-    if not phone:
-        return jsonify({"error": "No phone in session"}), 400
-    otp = generate_otp()
-    update_otp_phone(phone, otp)
-    result = send_otp_phone(phone, otp)
-    return jsonify({
-        "status":  "sent" if result.get("success") else "failed",
-        "channel": result.get("channel", ""),
-        "message": result.get("message", ""),
-    })
-
-
-@user_bp.route("/verify_otp", methods=["GET", "POST"])
-def verify_otp():
-    phone = session.get("otp_phone", "")
-    if not phone:
-        return redirect(url_for("user.login"))
-    if request.method == "POST":
-        entered = request.form.get("otp", "").strip()
-        worker = verify_otp_phone(phone, entered)
-        if worker:
-            session.pop("otp_phone", None)
-            session["user_id"] = worker["id"]
-            session["role"] = "user"
-            flash("✅ Logged in successfully.", "success")
-            return redirect(url_for("user.dashboard"))
-        flash("❌ Incorrect OTP. Please try again.", "danger")
-    return render_template("verify_otp.html", phone=phone)
 
 
 @user_bp.route("/logout")
@@ -153,9 +123,14 @@ def home():
         session.clear()
         return redirect(url_for("role_select"))
     ctx = _base_ctx(w)
-    ctx["weather"]       = get_weather(w.get("city", ""))
+    city = w.get("city", "")
+    ctx["weather"]        = get_weather(city)
     ctx["predicted_loss"] = predict_income_loss(3)
-    ctx["active_page"]   = "home"
+    ctx["active_page"]    = "home"
+    # Pass disruption summary for zero-touch UX banner
+    disrupted, dis_info   = check_disruption(city)
+    ctx["disruption"]     = dis_info
+    ctx["disrupted"]      = disrupted
     return render_template("user_home.html", **ctx)
 
 
@@ -226,6 +201,74 @@ def skip_payment():
     return redirect(url_for("user.home"))
 
 
+# ── Payment confirm (from subscription page) ─────────────────────────
+
+@user_bp.route("/payment/confirm", methods=["POST"])
+@user_required
+def payment_confirm():
+    from database import activate_subscription
+    w = _load_worker()
+    if not w:
+        session.clear()
+        return redirect(url_for("role_select"))
+    result = activate_subscription(w["email"])
+    if result["result"] == "SUCCESS":
+        flash("🎉 Payment confirmed! Subscription activated for 7 days.", "success")
+    else:
+        flash("❌ Payment window expired. Please re-register to get a new payment window.", "danger")
+    return redirect(url_for("user.subscription"))
+
+
+# ── Disruption check API (polling) ──────────────────────────────
+
+@user_bp.route("/disruption-check")
+@user_required
+def disruption_check():
+    """JSON endpoint — frontend polls this to show live disruption status."""
+    w = _load_worker()
+    if not w:
+        return jsonify({"error": "Not found"}), 404
+    triggered, info = check_disruption(w.get("city", ""))
+    return jsonify({
+        "triggered":      triggered,
+        "triggers_fired": info["triggers_fired"],
+        "trigger_count":  info["trigger_count"],
+        "primary_reason": info["primary_reason"],
+        "aqi":            info["aqi"]["aqi"],
+        "congestion":     info["traffic"]["congestion_index"],
+        "weather":        info["weather"].get("condition", ""),
+        "is_active":      subscription_active(w.get("email", "")),
+    })
+
+
+# ── Zero-touch auto-claim ─────────────────────────────────────────
+
+@user_bp.route("/auto-claim", methods=["POST"])
+@user_required
+def auto_claim():
+    """
+    Zero-touch claim: system calls this automatically when disruption is detected.
+    No manual input required — lost_hours defaults to 3h.
+    """
+    w = get_worker_by_id(session["user_id"])
+    if not w:
+        return jsonify({"error": "Worker not found"}), 404
+    w = dict(w)
+    email        = w.get("email", "")
+    worker_db_id = w["id"]
+
+    if not subscription_active(email):
+        return jsonify({"status": "skipped", "message": "Subscription not active."}), 200
+
+    triggered, dis_info = check_disruption(w.get("city", ""))
+    if not triggered:
+        return jsonify({"status": "skipped",
+                        "message": f"No disruption detected in {w.get('city','')}"}), 200
+
+    # Use default 3h lost for auto-claim
+    return _process_claim(w, email, worker_db_id, dis_info, lost_hours=3.0, auto=True)
+
+
 # ── Claim ─────────────────────────────────────────────────────────
 
 @user_bp.route("/claim", methods=["POST"])
@@ -238,7 +281,6 @@ def trigger_claim():
     email        = w.get("email", "")
     worker_db_id = w["id"]
 
-    # Step 1: Subscription
     if not subscription_active(email):
         pay_status = w.get("payment_status", "PENDING")
         if pay_status == "PENDING":
@@ -249,33 +291,33 @@ def trigger_claim():
             msg = "❌ No active subscription. Please renew."
         return jsonify({"status": "rejected", "message": msg}), 403
 
-    # Step 2: Doc status
     if w.get("doc_status") == "pending":
-        return jsonify({"status": "rejected",
-                        "message": "⏳ Documents under admin review."}), 403
+        return jsonify({"status": "rejected", "message": "⏳ Documents under admin review."}), 403
     if w.get("doc_status") == "rejected":
-        return jsonify({"status": "rejected",
-                        "message": "❌ Documents rejected. Please re-upload."}), 403
+        return jsonify({"status": "rejected", "message": "❌ Documents rejected. Please re-upload."}), 403
 
-    # Step 3: Weather
-    triggered, weather_info = weather_triggers_claim(w.get("city", ""))
+    triggered, dis_info = check_disruption(w.get("city", ""))
     if not triggered:
         return jsonify({"status": "rejected",
                         "message": f"⛅ No disruption in {w.get('city','')}. "
-                                   f"Current: {weather_info['condition']}"}), 200
+                                   f"{dis_info['primary_reason']}"}), 200
 
-    # Inputs
     lost_hours = float(request.form.get("lost_hours", 3.0))
-    cpw        = count_claims_this_week(email) + 1
-    gps_var    = float(request.form.get("gps_variance",    50.0))
-    dist_km    = float(request.form.get("distance_km",     80.0))
-    avg_hrs    = float(request.form.get("avg_daily_hours",  6.0))
-    login_f    = float(request.form.get("login_frequency",  2.0))
-    wm         = 1 if weather_info["weather_match"] else 0
-    ring       = is_fraud_ring(w.get("device_id", ""), worker_db_id)
-    trust_now  = get_trust_score(email)
+    return _process_claim(w, email, worker_db_id, dis_info, lost_hours=lost_hours, auto=False)
 
-    # Step 4: Rule-based
+
+def _process_claim(w: dict, email: str, worker_db_id: int,
+                   dis_info: dict, lost_hours: float, auto: bool) -> object:
+    """Shared claim processing logic for both manual and auto-claim paths."""
+    cpw     = count_claims_this_week(email) + 1
+    gps_var = float(w.get("fraud_score", 0) * 500)   # proxy from stored fraud score
+    dist_km = 80.0
+    avg_hrs = 6.0
+    login_f = float(cpw * 2 + 1)
+    wm      = 1 if dis_info["weather"].get("is_disrupted") else 0
+    ring    = is_fraud_ring(w.get("device_id", ""), worker_db_id)
+    trust_now = get_trust_score(email)
+
     rule_detail = check_rules_detail({
         "weather_match":      wm,
         "claims_per_week":    cpw,
@@ -287,8 +329,7 @@ def trigger_claim():
     })
     rule_status = rule_detail["status"]
 
-    # Step 5: ML fraud
-    ml_result = predict_fraud_full({
+    ml_result  = predict_fraud_full({
         "claims_per_week":    cpw,
         "avg_daily_hours":    avg_hrs,
         "gps_variance":       gps_var,
@@ -338,12 +379,21 @@ def trigger_claim():
 
     pred_loss = predict_income_loss(lost_hours)
 
+    # Build trigger label from all fired sources
+    trigger_type    = ",".join(dis_info.get("triggers_fired", ["WEATHER"])) or "WEATHER"
+    trigger_sources = dis_info.get("primary_reason", "")
+    aqi_val         = dis_info.get("aqi", {}).get("aqi", 0)
+    cong_idx        = dis_info.get("traffic", {}).get("congestion_index", 0.0)
+
     claim_id = create_claim({
         "worker_id":         str(worker_db_id),
         "lost_hours":        lost_hours,
         "predicted_loss":    pred_loss,
         "payout":            payout,
-        "weather_event":     weather_info.get("condition", ""),
+        "trigger_type":      trigger_type,
+        "trigger_sources":   trigger_sources,
+        "aqi_value":         aqi_val,
+        "congestion_index":  cong_idx,
         "weather_match":     wm,
         "fraud_score":       risk_score,
         "fraud_type":        event_type,
@@ -368,16 +418,19 @@ def trigger_claim():
             "trust_score_before": trust_now, "trust_score_after": trust_after,
         })
 
+    prefix = "🤖 Auto-claim" if auto else "Manual claim"
     msgs = {
-        "approved": f"✅ Claim approved! Payout: ₹{payout:.2f}. Trust: {trust_after}/100",
-        "review":   f"🔍 Flagged for review. Trust: {trust_after}/100.",
-        "rejected": f"❌ Rejected. {all_reasons[0] if all_reasons else 'Fraud detected.'}",
+        "approved": f"✅ {prefix} approved! Payout: ₹{payout:.2f}. Triggers: {trigger_type}",
+        "review":   f"🔍 {prefix} flagged for review. Trust: {trust_after}/100.",
+        "rejected": f"❌ {prefix} rejected. {all_reasons[0] if all_reasons else 'Fraud detected.'}",
     }
     return jsonify({
         "status": final_status, "message": msgs[final_status],
         "payout": payout, "rule_status": rule_status,
         "ml_label": ml_label, "ml_prob": ml_prob,
         "risk_score": risk_score, "trust_score": trust_after,
-        "weather_event": weather_info.get("condition", ""),
+        "trigger_type": trigger_type,
+        "triggers_fired": dis_info.get("triggers_fired", []),
+        "primary_reason": dis_info.get("primary_reason", ""),
         "reasons": all_reasons, "rules_hit": all_rules_hit,
     })

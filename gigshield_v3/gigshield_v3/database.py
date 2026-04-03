@@ -57,6 +57,7 @@ def init_db():
             payment_deadline     TEXT    DEFAULT '',
             premium              REAL    DEFAULT 0,
             coverage             REAL    DEFAULT 0,
+            city_risk_level      TEXT    DEFAULT 'LOW',
 
             -- Runtime
             claim_status         TEXT    DEFAULT 'none',
@@ -73,8 +74,10 @@ def init_db():
             lost_hours        REAL    DEFAULT 0,
             predicted_loss    REAL    DEFAULT 0,
             payout            REAL    DEFAULT 0,
-            weather_event     TEXT    DEFAULT '',
-            weather_match     INTEGER DEFAULT 0,
+            trigger_type      TEXT    DEFAULT '',
+            trigger_sources   TEXT    DEFAULT '',
+            aqi_value         INTEGER DEFAULT 0,
+            congestion_index  REAL    DEFAULT 0,
             fraud_score       REAL    DEFAULT 0,
             fraud_type        TEXT    DEFAULT '',
             rules_hit         TEXT    DEFAULT '',
@@ -137,6 +140,25 @@ def init_db():
         if "subscription_status" not in cols:
             c.execute("ALTER TABLE workers ADD COLUMN subscription_status TEXT DEFAULT 'INACTIVE'")
             print("[DB] Migration: subscription_status column added")
+        if "city_risk_level" not in cols:
+            c.execute("ALTER TABLE workers ADD COLUMN city_risk_level TEXT DEFAULT 'LOW'")
+            print("[DB] Migration: city_risk_level column added")
+
+    # Claims table migration
+    with get_conn() as c:
+        claim_cols = [r[1] for r in c.execute("PRAGMA table_info(claims)").fetchall()]
+        if "trigger_type" not in claim_cols:
+            c.execute("ALTER TABLE claims ADD COLUMN trigger_type TEXT DEFAULT ''")
+            print("[DB] Migration: claims.trigger_type added")
+        if "trigger_sources" not in claim_cols:
+            c.execute("ALTER TABLE claims ADD COLUMN trigger_sources TEXT DEFAULT ''")
+            print("[DB] Migration: claims.trigger_sources added")
+        if "aqi_value" not in claim_cols:
+            c.execute("ALTER TABLE claims ADD COLUMN aqi_value INTEGER DEFAULT 0")
+            print("[DB] Migration: claims.aqi_value added")
+        if "congestion_index" not in claim_cols:
+            c.execute("ALTER TABLE claims ADD COLUMN congestion_index REAL DEFAULT 0")
+            print("[DB] Migration: claims.congestion_index added")
 
     print(f"[DB] Ready -> {DB_PATH}")
 
@@ -174,24 +196,29 @@ def verify_otp_phone(phone: str, entered: str):
     return None
 
 def create_worker(data: dict) -> int:
-    pm = {"swiggy": 49.0, "zomato": 59.0}
-    premium  = pm.get(data.get("platform","").lower(), 39.0)
-    coverage = premium * 20
-    now      = datetime.utcnow()
-    deadline = now + timedelta(hours=24)
+    from triggers import calculate_premium, get_city_risk_level
+    city         = data.get("city", "")
+    cpw          = data.get("claim_history", 0)   # past claims used as proxy
+    risk_level   = get_city_risk_level(city)
+    premium      = calculate_premium(city, claims_per_week=cpw, weather_risk=risk_level)
+    coverage     = round(premium * 20, 2)
+    now          = datetime.utcnow()
+    deadline     = now + timedelta(hours=24)
     with get_conn() as c:
         cur = c.execute(
             """INSERT INTO workers
                (name,city,platform,worker_ref_id,email,device_id,premium,coverage,
-                payment_status,subscription_status,subscription_start,payment_deadline)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                payment_status,subscription_status,subscription_start,payment_deadline,
+                city_risk_level)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (data["name"], data["city"], data["platform"],
              data.get("worker_ref_id",""),
              data["email"].lower().strip(),
              data.get("device_id",""),
              premium, coverage,
              "PENDING", "INACTIVE",
-             now.isoformat(), deadline.isoformat())
+             now.isoformat(), deadline.isoformat(),
+             risk_level)
         )
         if data.get("device_id"):
             c.execute(
@@ -199,6 +226,15 @@ def create_worker(data: dict) -> int:
                 (data["device_id"], str(cur.lastrowid))
             )
         return cur.lastrowid
+
+
+def update_premium(email: str, premium: float, coverage: float, risk_level: str):
+    """Recalculate and persist dynamic premium for an existing worker."""
+    with get_conn() as c:
+        c.execute(
+            "UPDATE workers SET premium=?, coverage=?, city_risk_level=? WHERE email=?",
+            (premium, coverage, risk_level, email.lower().strip())
+        )
 
 def get_worker_by_email(email: str):
     with get_conn() as c:
@@ -264,7 +300,7 @@ def activate_subscription(email: str) -> dict:
     email = email.lower().strip()
     with get_conn() as c:
         r = c.execute(
-            "SELECT payment_deadline FROM workers WHERE email=?", (email,)
+            "SELECT payment_deadline, name FROM workers WHERE email=?", (email,)
         ).fetchone()
     now = datetime.utcnow()
     try:
@@ -282,6 +318,20 @@ def activate_subscription(email: str) -> dict:
                    WHERE email=?""",
                 (end.isoformat(), email)
             )
+        # Send activation confirmation email
+        try:
+            from otp_service import send_email
+            name = r["name"] if r else "Worker"
+            send_email(
+                email,
+                "Subscription Activated — GigShield AI",
+                f"Hello {name},\n\nYour GigShield AI subscription is now ACTIVE.\n"
+                f"Coverage period: {now.strftime('%Y-%m-%d')} to {end.strftime('%Y-%m-%d')}\n"
+                f"You are now protected against weather and disruption-based income loss.\n\n"
+                f"— GigShield AI Team"
+            )
+        except Exception:
+            pass
         return {"result": "SUCCESS", "subscription_end": end.isoformat()}
     else:
         with get_conn() as c:
@@ -346,11 +396,16 @@ def create_claim(data: dict) -> int:
     with get_conn() as c:
         cur = c.execute(
             """INSERT INTO claims
-               (worker_id,lost_hours,predicted_loss,payout,weather_event,
-                weather_match,fraud_score,fraud_type,rules_hit,status,rejection_reasons)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               (worker_id,lost_hours,predicted_loss,payout,trigger_type,trigger_sources,
+                aqi_value,congestion_index,weather_match,fraud_score,fraud_type,
+                rules_hit,status,rejection_reasons)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (data["worker_id"], data.get("lost_hours",0), data.get("predicted_loss",0),
-             data.get("payout",0), data.get("weather_event",""),
+             data.get("payout",0),
+             data.get("trigger_type", data.get("weather_event","")),
+             data.get("trigger_sources", data.get("weather_event","")),
+             data.get("aqi_value", 0),
+             data.get("congestion_index", 0.0),
              data.get("weather_match",0), data.get("fraud_score",0),
              data.get("fraud_type",""), data.get("rules_hit",""),
              data.get("status","pending"), data.get("rejection_reasons",""))
@@ -386,6 +441,7 @@ def admin_stats() -> dict:
         sub  = c.execute("SELECT COUNT(*) FROM workers WHERE payment_status='SUCCESS'").fetchone()[0]
         tc   = c.execute("SELECT COUNT(*) FROM claims").fetchone()[0]
         frd  = c.execute("SELECT COUNT(*) FROM claims WHERE status='rejected'").fetchone()[0]
+        appr = c.execute("SELECT COUNT(*) FROM claims WHERE status='approved'").fetchone()[0]
         rev  = c.execute("SELECT COUNT(*) FROM claims WHERE status='review'").fetchone()[0]
         pay  = c.execute("SELECT COALESCE(SUM(payout),0) FROM claims WHERE status='approved'").fetchone()[0]
         pd   = c.execute("SELECT COUNT(*) FROM workers WHERE doc_status='pending'").fetchone()[0]
@@ -396,12 +452,18 @@ def admin_stats() -> dict:
         rings = c.execute(
             "SELECT COUNT(*) FROM (SELECT device_id FROM device_registry GROUP BY device_id HAVING COUNT(DISTINCT worker_id)>1)"
         ).fetchone()[0]
+        # Trigger source breakdown
+        trig_rows = c.execute(
+            "SELECT trigger_type, COUNT(*) as cnt FROM claims WHERE trigger_type!='' GROUP BY trigger_type ORDER BY cnt DESC"
+        ).fetchall()
+        trigger_stats = {r["trigger_type"]: r["cnt"] for r in trig_rows}
     return dict(
         total_workers=tw, email_verified=ev, active_subs=sub,
-        total_claims=tc, fraud_cases=frd, review_cases=rev,
+        total_claims=tc, fraud_cases=frd, approved_cases=appr, review_cases=rev,
         total_payout=round(float(pay),2),
         pending_docs=pd, approved_docs=ad, rejected_docs=rd,
         fraud_rings=rings,
+        trigger_stats=trigger_stats,
         recent_workers=[dict(r) for r in rw],
         recent_claims=[dict(r) for r in rc],
     )

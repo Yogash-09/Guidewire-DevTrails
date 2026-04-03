@@ -64,11 +64,11 @@
     <img src="/static/{{ qr_file }}" style="max-width:220px;width:100%;border-radius:12px" alt="UPI QR"/>
     <div style="font-size:.7rem;color:var(--muted);margin-top:.5rem">UPI: hariskanis@oksbi</div>
   </div>
-  <form method="POST" action="/payment/confirm">
+  <form method="POST" action="{{ url_for('user.payment_confirm') }}">
     <button type="submit" class="btn-teal w-100">✅ I've Paid — Activate Coverage</button>
   </form>
   <div style="text-align:center;margin-top:.65rem">
-    <a href="{{ url_for('user.home') }}" style="font-size:.78rem;color:var(--muted);text-decoration:none">
+    <a href="{{ url_for('user.skip_payment') }}" style="font-size:.78rem;color:var(--muted);text-decoration:none">
       Skip for now — pay later before deadline
     </a>
   </div>
@@ -90,7 +90,7 @@
   <div style="text-align:center;margin-bottom:.85rem">
     <img src="/static/{{ qr_file }}" style="max-width:220px;width:100%;border-radius:12px" alt="UPI QR"/>
   </div>
-  <form method="POST" action="/payment/confirm">
+  <form method="POST" action="{{ url_for('user.payment_confirm') }}">
     <button type="submit" class="btn-teal w-100">✅ I've Paid — Renew Coverage</button>
   </form>
 </div>

@@ -6,7 +6,12 @@
 <div style="margin-bottom:1rem">
   <div style="font-size:.8rem;color:var(--muted)">Welcome back 👋</div>
   <div style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.5rem">{{ worker.name.split()[0] }}</div>
-  <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">{{ worker.city }} · {{ worker.platform }}</div>
+  <div style="font-size:.78rem;color:var(--muted);margin-top:.15rem">
+    {{ worker.city }} · {{ worker.platform }}
+    {% if worker.city_risk_level %}
+    · <span style="color:{{ 'var(--danger)' if worker.city_risk_level=='HIGH' else ('var(--gold)' if worker.city_risk_level=='MEDIUM' else 'var(--teal)') }}">{{ worker.city_risk_level }} RISK</span>
+    {% endif %}
+  </div>
 </div>
 
 <!-- Status banner -->
@@ -57,24 +62,69 @@
   </div></div>
 </div>
 
-<!-- Weather card -->
+<!-- Multi-source disruption panel -->
 <div class="gs-card">
-  <div class="gs-card-title">🌤️ Weather — {{ worker.city }}</div>
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <span style="font-size:2rem">{{ '🌧️' if weather.is_disrupted else '☀️' }}</span>
-    <div>
-      <div style="font-weight:600;font-size:.9rem">{{ weather.condition }}</div>
-      <div style="font-size:.74rem;color:var(--muted)">{{ weather.temperature }}°C · {{ weather.source }}</div>
-    </div>
-    {% if weather.is_disrupted %}
-    <span class="sb b-off ms-auto">Disrupted</span>
-    {% endif %}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.65rem">
+    <div class="gs-card-title" style="margin:0">🚨 Disruption Sensors</div>
+    <span class="sb {{ 'b-off' if disrupted else 'b-act' }}">
+      {{ '⚠️ ' + disruption.trigger_count|string + ' Active' if disrupted else '✅ All Clear' }}
+    </span>
   </div>
-  {% if weather.is_disrupted %}
-  <div style="margin-top:.65rem;font-size:.78rem;color:var(--danger);background:rgba(255,71,87,.07);border-radius:8px;padding:.5rem .75rem">
-    ⚠️ Disruption detected — <a href="{{ url_for('user.claims') }}" style="color:var(--danger);font-weight:600">file a claim →</a>
+
+  <div class="row g-2" style="font-size:.76rem">
+    <!-- Weather -->
+    <div class="col-6">
+      <div style="background:var(--s2);border-radius:8px;padding:.5rem .7rem;border:1px solid {{ 'rgba(255,71,87,.3)' if disruption.weather.is_disrupted else 'var(--bd)' }}">
+        <div style="color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px">Weather</div>
+        <div style="font-weight:600;margin-top:.15rem;color:{{ 'var(--danger)' if disruption.weather.is_disrupted else 'var(--teal)' }}">
+          {{ '🌧️ ' + disruption.weather.condition if disruption.weather.is_disrupted else '☀️ Clear' }}
+        </div>
+      </div>
+    </div>
+    <!-- AQI -->
+    <div class="col-6">
+      <div style="background:var(--s2);border-radius:8px;padding:.5rem .7rem;border:1px solid {{ 'rgba(255,71,87,.3)' if disruption.aqi.triggered else 'var(--bd)' }}">
+        <div style="color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px">Air Quality</div>
+        <div style="font-weight:600;margin-top:.15rem;color:{{ 'var(--danger)' if disruption.aqi.triggered else 'var(--teal)' }}">
+          {{ '💨 AQI ' + disruption.aqi.aqi|string if disruption.aqi.triggered else '🟢 AQI ' + disruption.aqi.aqi|string }}
+        </div>
+      </div>
+    </div>
+    <!-- Traffic -->
+    <div class="col-6">
+      <div style="background:var(--s2);border-radius:8px;padding:.5rem .7rem;border:1px solid {{ 'rgba(255,71,87,.3)' if disruption.traffic.triggered else 'var(--bd)' }}">
+        <div style="color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px">Traffic</div>
+        <div style="font-weight:600;margin-top:.15rem;color:{{ 'var(--danger)' if disruption.traffic.triggered else 'var(--teal)' }}">
+          {{ '🚦 ' + (disruption.traffic.congestion_index * 100)|int|string + '% congestion' }}
+        </div>
+      </div>
+    </div>
+    <!-- Flood -->
+    <div class="col-6">
+      <div style="background:var(--s2);border-radius:8px;padding:.5rem .7rem;border:1px solid {{ 'rgba(255,71,87,.3)' if disruption.flood.triggered else 'var(--bd)' }}">
+        <div style="color:var(--muted);font-size:.65rem;text-transform:uppercase;letter-spacing:.4px">Flood Alert</div>
+        <div style="font-weight:600;margin-top:.15rem;color:{{ 'var(--danger)' if disruption.flood.triggered else 'var(--teal)' }}">
+          {{ '🚨 Alert Active' if disruption.flood.triggered else '✅ None' }}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if disrupted and is_active %}
+  <div style="margin-top:.75rem;background:rgba(255,71,87,.07);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem .85rem;display:flex;align-items:center;justify-content:space-between">
+    <div style="font-size:.79rem;color:var(--danger)">🤖 Disruption detected — auto-claim available</div>
+    <button onclick="triggerAutoClaim()" id="autoBtn"
+            style="background:var(--danger);color:#fff;border:none;border-radius:999px;padding:.3rem .85rem;font-size:.74rem;font-weight:700;cursor:pointer;white-space:nowrap">
+      Auto-Claim
+    </button>
+  </div>
+  {% elif disrupted %}
+  <div style="margin-top:.65rem;font-size:.78rem;color:var(--gold)">
+    ⚠️ Disruption active but subscription is not.
+    <a href="{{ url_for('user.subscription') }}" style="color:var(--gold);font-weight:600">Activate →</a>
   </div>
   {% endif %}
+  <div id="autoClaimMsg" style="margin-top:.5rem;font-size:.78rem;text-align:center"></div>
 </div>
 
 <!-- Quick links -->
@@ -96,4 +146,27 @@
     </a>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function triggerAutoClaim(){
+  const btn = document.getElementById('autoBtn');
+  const msg = document.getElementById('autoClaimMsg');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ Processing…'; }
+  try{
+    const r = await fetch('{{ url_for("user.auto_claim") }}', {method:'POST'});
+    const d = await r.json();
+    if(msg){
+      msg.textContent = d.message;
+      msg.style.color = d.status==='approved' ? 'var(--teal)' : (d.status==='rejected' ? 'var(--danger)' : 'var(--gold)');
+    }
+    if(d.status !== 'skipped') setTimeout(()=>location.reload(), 2500);
+    else if(btn){ btn.disabled=false; btn.textContent='Auto-Claim'; }
+  }catch{
+    if(msg){ msg.textContent='❌ Network error.'; msg.style.color='var(--danger)'; }
+    if(btn){ btn.disabled=false; btn.textContent='Auto-Claim'; }
+  }
+}
+</script>
 {% endblock %}

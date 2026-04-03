@@ -37,6 +37,7 @@
 <div class="sidebar">
   <div class="logo mb-4">Gig<span>Shield</span> Admin</div>
   <a href="/admin/dashboard" class="ni act">📊 Overview</a>
+  <a href="#trigger-stats" class="ni">🚨 Trigger Stats</a>
   <a href="#pending-payments" class="ni">💳 Pending Payments {% if pending_payments %}<span style="background:var(--gold);color:#0a0e1a;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ pending_payments|length }}</span>{% endif %}</a>
   <a href="#doc-review" class="ni">📄 Doc Review {% if stats.pending_docs > 0 %}<span style="background:var(--danger);color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ stats.pending_docs }}</span>{% endif %}</a>
   <a href="#fraud-rings" class="ni">🕵️ Fraud Rings {% if fraud_rings %}<span style="background:var(--danger);color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ fraud_rings|length }}</span>{% endif %}</a>
@@ -74,6 +75,7 @@
       ('📄','Pending Docs',stats.pending_docs,'var(--gold)'),
       ('✔️','Docs Approved',stats.approved_docs,'var(--teal)'),
       ('🚨','Fraud Rejected',stats.fraud_cases,'var(--danger)'),
+      ('✅','Claims Approved',stats.approved_cases,'var(--teal)'),
       ('💸','Total Payouts','₹'+('%.0f'|format(stats.total_payout)),'var(--teal)'),
       ('🕵️','Fraud Rings',stats.fraud_rings,'var(--danger)'),
     ] %}
@@ -103,6 +105,33 @@
       </div>
       {% endfor %}
     </div>
+  </div>
+
+  <!-- Trigger Stats -->
+  <div id="trigger-stats" class="gs-card mb-4" style="border-color:rgba(0,201,167,.3)">
+    <div class="sh" style="color:var(--teal)">🚨 Disruption Trigger Statistics</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.85rem">
+      Breakdown of automated claim triggers fired across all claims.
+    </div>
+    {% if stats.trigger_stats %}
+    <div class="row g-3">
+      {% set trigger_icons = {'WEATHER': '🌧️', 'AQI': '💨', 'TRAFFIC': '🚦', 'FLOOD': '🌊'} %}
+      {% set trigger_colors = {'WEATHER': 'var(--teal)', 'AQI': 'var(--gold)', 'TRAFFIC': 'var(--danger)', 'FLOOD': '#60a5fa'} %}
+      {% for ttype, cnt in stats.trigger_stats.items() %}
+      <div class="col-6 col-md-3">
+        <div class="sc" style="border-color:rgba(0,201,167,.2)">
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.25rem">
+            {{ trigger_icons.get(ttype.split(',')[0], '💡') }} {{ ttype }}
+          </div>
+          <div class="sv" style="color:{{ trigger_colors.get(ttype.split(',')[0], 'var(--text)') }}">{{ cnt }}</div>
+          <div style="font-size:.68rem;color:var(--muted)">claims triggered</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No trigger data yet. Claims will populate this once filed.</div>
+    {% endif %}
   </div>
 
   <!-- Pending Payments -->
@@ -259,7 +288,7 @@
     <div class="sh">📋 Recent Claims</div>
     <div style="overflow-x:auto">
       <table class="tbl">
-        <thead><tr><th>#</th><th>Worker</th><th>Date</th><th>Event</th><th>Hrs</th><th>Predicted</th><th>Payout</th><th>Fraud%</th><th>Status</th></tr></thead>
+        <thead><tr><th>#</th><th>Worker</th><th>Date</th><th>Triggers</th><th>Hrs</th><th>Predicted</th><th>Payout</th><th>Fraud%</th><th>Status</th></tr></thead>
         <tbody>
           {% if stats.recent_claims %}
             {% for c in stats.recent_claims %}
@@ -267,7 +296,7 @@
               <td style="color:var(--muted)">#{{ c.id }}</td>
               <td style="font-size:.75rem">{{ c.worker_id }}</td>
               <td style="color:var(--muted)">{{ c.claim_date[:10] }}</td>
-              <td>{{ c.weather_event or '—' }}</td>
+              <td style="font-size:.75rem">{{ c.trigger_type or c.weather_event or '—' }}</td>
               <td>{{ c.lost_hours }}h</td>
               <td>₹{{ '%.0f'|format(c.predicted_loss) }}</td>
               <td style="color:var(--teal);font-weight:600">{{ '₹'+'%.0f'|format(c.payout) if c.payout>0 else '—' }}</td>
