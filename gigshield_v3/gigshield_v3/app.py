@@ -332,55 +332,6 @@ def server_error(e):
     return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    import threading
-
-    # ── Worker app (port 5000) ────────────────────────────────────
-    worker_app = Flask(__name__ + "_worker")
-    worker_app.secret_key = app.secret_key
-
-    from routes_user import user_bp as _ubp
-    from flask import render_template as _rt, redirect as _rd, url_for as _uf
-    from flask import request as _req, session as _ses, flash as _fl, jsonify as _jfy
-    from functools import wraps as _wraps
-
-    worker_app.register_blueprint(_ubp)
-
-    # copy all non-admin routes from main app onto worker_app
-    for rule in app.url_map.iter_rules():
-        if "/admin/" not in rule.rule and rule.endpoint not in worker_app.view_functions:
-            view = app.view_functions.get(rule.endpoint)
-            if view:
-                worker_app.add_url_rule(
-                    rule.rule, endpoint=rule.endpoint,
-                    view_func=view, methods=rule.methods
-                )
-
-    # ── Admin app (port 5001) ─────────────────────────────────────
-    admin_app = Flask(__name__ + "_admin")
-    admin_app.secret_key = app.secret_key
-
-    from routes_admin import admin_bp as _abp
-    admin_app.register_blueprint(_abp)
-
-    @admin_app.route("/")
-    def _admin_index():
-        return _rd("/admin/login")
-
-    @admin_app.errorhandler(404)
-    def _admin_404(_): return _rt("404.html"), 404
-
-    # ── Launch both servers in threads ────────────────────────────
-    def run_worker():
-        print(" * Worker Portal  ->  http://127.0.0.1:5000")
-        app.run(debug=False, host="127.0.0.1", port=5000, use_reloader=False)
-
-    def run_admin():
-        print(" * Admin Portal   ->  http://127.0.0.1:5001")
-        from werkzeug.serving import make_server
-        srv = make_server("127.0.0.1", 5001, admin_app)
-        srv.serve_forever()
-
-    t = threading.Thread(target=run_admin, daemon=True)
-    t.start()
-
-    run_worker()
+    port = int(os.environ.get("PORT", 5000))
+    print(f"App running on PORT {port}")
+    app.run(host="0.0.0.0", port=port)
