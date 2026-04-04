@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Admin — GigShield AI</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#30363d;--teal:#00c9a7;--gold:#f5a623;--danger:#ff4757;--text:#e6edf3;--muted:#8b949e;}
+  *{box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;margin:0}
+  .sidebar{width:220px;background:var(--s1);border-right:1px solid var(--bd);height:100vh;position:fixed;top:0;left:0;padding:1.25rem 1rem;display:flex;flex-direction:column}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;color:var(--text)}.logo span{color:var(--gold)}
+  .ni{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border-radius:10px;color:var(--muted);font-size:.83rem;font-weight:500;text-decoration:none;transition:all .15s;margin-bottom:.1rem}
+  .ni:hover,.ni.act{background:var(--s2);color:var(--text)}
+  .main{margin-left:220px;padding:1.5rem 2rem}
+  @media(max-width:768px){.sidebar{display:none}.main{margin-left:0;padding:1rem}}
+  .gs-card{background:var(--s1);border:1px solid var(--bd);border-radius:16px;padding:1.25rem 1.5rem}
+  .sc{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:1.1rem}
+  .sv{font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800}
+  .bp{display:inline-flex;align-items:center;padding:.2rem .7rem;border-radius:999px;font-size:.71rem;font-weight:600}
+  .bg{background:rgba(0,201,167,.12);color:var(--teal)}.br{background:rgba(255,71,87,.12);color:var(--danger)}.bo{background:rgba(245,166,35,.12);color:var(--gold)}.bm{background:var(--s2);color:var(--muted)}
+  .tbl{width:100%;border-collapse:separate;border-spacing:0}
+  .tbl th{font-size:.7rem;color:var(--muted);font-weight:600;padding:.5rem .7rem;border-bottom:1px solid var(--bd);text-transform:uppercase;letter-spacing:.5px}
+  .tbl td{font-size:.81rem;padding:.58rem .7rem;border-bottom:1px solid var(--bd)}
+  .tbl tr:last-child td{border:none}
+  .sh{font-family:'Syne',sans-serif;font-weight:700;font-size:.93rem;margin-bottom:.85rem}
+  .doc-img{width:80px;height:60px;object-fit:cover;border-radius:6px;cursor:pointer}
+  .review-form input[type=text]{background:var(--s2);border:1px solid var(--bd);border-radius:8px;color:var(--text);padding:.35rem .7rem;font-size:.78rem;width:100%;margin-bottom:.35rem}
+  .review-form input[type=text]:focus{outline:none;border-color:var(--teal)}
+  .btn-approve{background:var(--teal);color:#0a0e1a;border:none;border-radius:999px;padding:.35rem .9rem;font-size:.76rem;font-weight:700;cursor:pointer}
+  .btn-reject{background:var(--danger);color:#fff;border:none;border-radius:999px;padding:.35rem .9rem;font-size:.76rem;font-weight:700;cursor:pointer;margin-left:.3rem}
+  .alert-queue{background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.3);border-radius:12px;padding:.65rem 1rem;font-size:.82rem;color:var(--gold);margin-bottom:1rem}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="logo mb-4">Gig<span>Shield</span> Admin</div>
+  <a href="/admin/dashboard" class="ni act">📊 Overview</a>
+  <a href="#trigger-stats" class="ni">🚨 Trigger Stats</a>
+  <a href="#pending-payments" class="ni">💳 Pending Payments {% if pending_payments %}<span style="background:var(--gold);color:#0a0e1a;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ pending_payments|length }}</span>{% endif %}</a>
+  <a href="#doc-review" class="ni">📄 Doc Review {% if stats.pending_docs > 0 %}<span style="background:var(--danger);color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ stats.pending_docs }}</span>{% endif %}</a>
+  <a href="#fraud-rings" class="ni">🕵️ Fraud Rings {% if fraud_rings %}<span style="background:var(--danger);color:#fff;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ fraud_rings|length }}</span>{% endif %}</a>
+  <a href="#suspicious" class="ni">⚠️ Suspicious {% if suspicious_workers %}<span style="background:var(--gold);color:#0a0e1a;border-radius:999px;padding:.05rem .45rem;font-size:.66rem;margin-left:auto">{{ suspicious_workers|length }}</span>{% endif %}</a>
+  <a href="#fraud-log" class="ni">📋 Fraud Log</a>
+  <a href="#workers" class="ni">👷 Workers</a>
+  <a href="#claims" class="ni">📋 Claims</a>
+  <a href="#ml" class="ni">🤖 ML Analytics</a>
+  <div style="margin-top:auto"><a href="/admin/logout" class="ni" style="color:var(--danger)">🚪 Logout</a></div>
+</div>
+
+<div class="main">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.4rem;margin:0">Admin Dashboard</h1>
+      <div style="font-size:.79rem;color:var(--muted)">GigShield AI · Internal verification platform</div>
+    </div>
+    <div style="font-size:.76rem;color:var(--muted)">🟢 ML Active · <span id="lt" style="color:var(--teal)"></span></div>
+  </div>
+
+  {% with msgs=get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}
+    <div class="alert alert-{{ 'success' if cat=='success' else 'warning' }} alert-dismissible fade show" style="border-radius:10px;font-size:.85rem">
+      {{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+  {% endwith %}
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    {% for icon,lbl,val,col in [
+      ('👷','Total Workers',stats.total_workers,'var(--teal)'),
+      ('📧','Email Verified',stats.email_verified,'var(--teal)'),
+      ('✅','Active Subs',stats.active_subs,'var(--gold)'),
+      ('📄','Pending Docs',stats.pending_docs,'var(--gold)'),
+      ('✔️','Docs Approved',stats.approved_docs,'var(--teal)'),
+      ('🚨','Fraud Rejected',stats.fraud_cases,'var(--danger)'),
+      ('✅','Claims Approved',stats.approved_cases,'var(--teal)'),
+      ('💸','Total Payouts','₹'+('%.0f'|format(stats.total_payout)),'var(--teal)'),
+      ('🕵️','Fraud Rings',stats.fraud_rings,'var(--danger)'),
+    ] %}
+    <div class="col-6 col-md-3">
+      <div class="sc"><div style="font-size:.75rem;color:var(--muted);margin-bottom:.25rem">{{ icon }} {{ lbl }}</div>
+      <div class="sv" style="color:{{ col }}">{{ val }}</div></div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Honest verification note -->
+  <div class="gs-card mb-4" style="border-color:rgba(0,201,167,.3)">
+    <div class="sh" style="color:var(--teal)">🔒 Verification Model — What We Actually Do</div>
+    <div class="row g-3">
+      {% for step,status,desc in [
+        ('1. Email OTP','✅ Automated','Worker proves ownership of their email address'),
+        ('2. Platform','⚠️ Self-Declared','Worker selects Swiggy/Zomato/Other — NOT API-verified'),
+        ('3. Documents','👆 Manual Review','Admin reviews ID card + delivery app screenshot below'),
+        ('4. Decision','👆 Admin Action','You approve or reject — sets verified_by_admin status'),
+      ] %}
+      <div class="col-md-3">
+        <div style="background:var(--s2);border-radius:10px;padding:.75rem;height:100%">
+          <div style="font-weight:700;font-size:.82rem;margin-bottom:.2rem">{{ step }}</div>
+          <div style="font-size:.72rem;color:var(--teal);margin-bottom:.3rem">{{ status }}</div>
+          <div style="font-size:.75rem;color:var(--muted)">{{ desc }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Trigger Stats -->
+  <div id="trigger-stats" class="gs-card mb-4" style="border-color:rgba(0,201,167,.3)">
+    <div class="sh" style="color:var(--teal)">🚨 Disruption Trigger Statistics</div>
+    <div style="font-size:.78rem;color:var(--muted);margin-bottom:.85rem">
+      Breakdown of automated claim triggers fired across all claims.
+    </div>
+    {% if stats.trigger_stats %}
+    <div class="row g-3">
+      {% set trigger_icons = {'WEATHER': '🌧️', 'AQI': '💨', 'TRAFFIC': '🚦', 'FLOOD': '🌊'} %}
+      {% set trigger_colors = {'WEATHER': 'var(--teal)', 'AQI': 'var(--gold)', 'TRAFFIC': 'var(--danger)', 'FLOOD': '#60a5fa'} %}
+      {% for ttype, cnt in stats.trigger_stats.items() %}
+      <div class="col-6 col-md-3">
+        <div class="sc" style="border-color:rgba(0,201,167,.2)">
+          <div style="font-size:.75rem;color:var(--muted);margin-bottom:.25rem">
+            {{ trigger_icons.get(ttype.split(',')[0], '💡') }} {{ ttype }}
+          </div>
+          <div class="sv" style="color:{{ trigger_colors.get(ttype.split(',')[0], 'var(--text)') }}">{{ cnt }}</div>
+          <div style="font-size:.68rem;color:var(--muted)">claims triggered</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No trigger data yet. Claims will populate this once filed.</div>
+    {% endif %}
+  </div>
+
+  <!-- Pending Payments -->
+  <div id="pending-payments" class="gs-card mb-4" style="border-color:rgba(245,166,35,.3)">
+    <div class="sh" style="color:var(--gold)">💳 Pending Payments
+      {% if pending_payments %}<span class="bp bo">{{ pending_payments|length }} pending</span>{% endif %}
+    </div>
+    {% if pending_payments %}
+    <div style="background:rgba(245,166,35,.06);border:1px solid rgba(245,166,35,.2);border-radius:10px;padding:.6rem 1rem;margin-bottom:.75rem;font-size:.81rem;color:var(--gold)">
+      ⏳ These workers registered but have not completed payment yet. Reminder emails are sent automatically within 6 hours of their deadline.
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Email</th><th>Payment Deadline (UTC)</th><th>Time Left</th></tr></thead>
+        <tbody>
+          {% for w in pending_payments %}
+          <tr>
+            <td style="font-weight:500">{{ w.name }}</td>
+            <td style="font-size:.76rem">{{ w.email }}</td>
+            <td style="font-size:.76rem;color:var(--gold)">{{ w.payment_deadline[:16] | replace('T',' ') if w.payment_deadline else '—' }}</td>
+            <td style="font-size:.76rem" id="tl-{{ loop.index }}" data-deadline="{{ w.payment_deadline }}">—</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No pending payments. ✅</div>
+    {% endif %}
+  </div>
+
+  <!-- Document Review Queue -->
+  <div id="doc-review" class="gs-card mb-4">
+    <div class="sh">📄 Document Review Queue {% if stats.pending_docs > 0 %}<span class="bp bo">{{ stats.pending_docs }} pending</span>{% endif %}</div>
+
+    {% if pending_docs %}
+    {% if stats.pending_docs > 0 %}
+    <div class="alert-queue">⏳ {{ stats.pending_docs }} worker(s) awaiting document review. Review and approve/reject below.</div>
+    {% endif %}
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr>
+          <th>Worker</th><th>Email</th><th>Platform (Self-Declared)</th>
+          <th>Ref ID</th><th>ID Card</th><th>App Screenshot</th><th>Action</th>
+        </tr></thead>
+        <tbody>
+          {% for w in pending_docs %}
+          <tr>
+            <td style="font-weight:500">{{ w.name }}</td>
+            <td style="font-size:.76rem">{{ w.email }}</td>
+            <td>
+              <span class="bp bo">{{ w.platform }}</span>
+              <div style="font-size:.68rem;color:var(--muted);margin-top:.15rem">self-declared</div>
+            </td>
+            <td style="font-family:monospace;font-size:.75rem;color:var(--muted)">{{ w.worker_ref_id or '—' }}</td>
+            <td>
+              {% if w.id_card_path %}
+              <a href="/static/{{ w.id_card_path }}" target="_blank">
+                <img src="/static/{{ w.id_card_path }}" class="doc-img" alt="ID Card"/>
+              </a>
+              {% else %}<span style="font-size:.74rem;color:var(--muted)">Not uploaded</span>{% endif %}
+            </td>
+            <td>
+              {% if w.app_screenshot_path %}
+              <a href="/static/{{ w.app_screenshot_path }}" target="_blank">
+                <img src="/static/{{ w.app_screenshot_path }}" class="doc-img" alt="Screenshot"/>
+              </a>
+              {% else %}<span style="font-size:.74rem;color:var(--muted)">Not uploaded</span>{% endif %}
+            </td>
+            <td>
+              <form method="POST" action="/admin/review/{{ w.id }}" class="review-form">
+                <input type="text" name="note" placeholder="Optional review note…"/>
+                <div>
+                  <button type="submit" name="action" value="approved" class="btn-approve">✅ Approve</button>
+                  <button type="submit" name="action" value="rejected" class="btn-reject">❌ Reject</button>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:2rem;color:var(--muted);font-size:.85rem">
+      No documents pending review. ✅
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ML Charts -->
+  <div id="ml" class="row g-3 mb-4">
+    <div class="col-md-6">
+      <div class="gs-card">
+        <div class="sh">📈 Income Prediction (LinearRegression)</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.6rem">lost_hours → predicted loss (₹90/hr)</div>
+        <canvas id="ic" height="200"></canvas>
+      </div>
+    </div>
+    <div class="col-md-6">
+      <div class="gs-card">
+        <div class="sh">🎯 Fraud Feature Importances (RandomForest)</div>
+        <div style="font-size:.75rem;color:var(--muted);margin-bottom:.6rem">6 features · 300 trees · class_weight=balanced</div>
+        <canvas id="fc" height="200"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Workers -->
+  <div id="workers" class="gs-card mb-4">
+    <div class="sh">👷 Recent Workers</div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Email</th><th>Platform</th><th>Email OTP</th><th>Doc Status</th><th>Sub</th><th>Fraud</th><th>Claim</th></tr></thead>
+        <tbody>
+          {% if stats.recent_workers %}
+            {% for w in stats.recent_workers %}
+            <tr>
+              <td style="font-weight:500">{{ w.name }}</td>
+              <td style="font-size:.76rem">{{ w.email }}</td>
+              <td>
+                <span class="bp {{ 'bo' if w.platform=='Zomato' else 'bg' }}">{{ w.platform }}</span>
+                <div style="font-size:.63rem;color:var(--muted)">self-declared</div>
+              </td>
+              <td><span class="bp {{ 'bg' if w.email_verified else 'br' }}">{{ '✓ Verified' if w.email_verified else 'Pending' }}</span></td>
+              <td>
+                <span class="bp {{ 'bg' if w.doc_status=='approved' else ('br' if w.doc_status=='rejected' else ('bo' if w.doc_status=='pending' else 'bm')) }}">
+                  {{ w.doc_status or 'none' }}
+                </span>
+              </td>
+              <td>
+                {% set ps = (w.payment_status or 'PENDING') | upper %}
+                <span class="bp {{ 'bg' if ps=='SUCCESS' else ('bo' if ps=='PENDING' else 'br') }}">
+                  {{ 'Active' if ps=='SUCCESS' else ('Pending' if ps=='PENDING' else 'Expired') }}
+                </span>
+              </td>
+              <td>
+                {% set fs=(w.fraud_score or 0)*100 %}
+                <span style="color:{{ 'var(--teal)' if fs<35 else ('var(--gold)' if fs<65 else 'var(--danger)') }};font-weight:600">{{ fs|int }}%</span>
+              </td>
+              <td><span class="bp {{ 'bg' if w.claim_status=='approved' else ('bo' if w.claim_status=='review' else ('br' if w.claim_status=='rejected' else 'bm')) }}" style="font-size:.67rem">{{ (w.claim_status or 'none')|upper }}</span></td>
+            </tr>
+            {% endfor %}
+          {% else %}
+          <tr><td colspan="8" style="text-align:center;color:var(--muted);padding:2rem">No workers yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Claims -->
+  <div id="claims" class="gs-card mb-4">
+    <div class="sh">📋 Recent Claims</div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Worker</th><th>Date</th><th>Triggers</th><th>Hrs</th><th>Predicted</th><th>Payout</th><th>Fraud%</th><th>Status</th></tr></thead>
+        <tbody>
+          {% if stats.recent_claims %}
+            {% for c in stats.recent_claims %}
+            <tr>
+              <td style="color:var(--muted)">#{{ c.id }}</td>
+              <td style="font-size:.75rem">{{ c.worker_id }}</td>
+              <td style="color:var(--muted)">{{ c.claim_date[:10] }}</td>
+              <td style="font-size:.75rem">{{ c.trigger_type or c.weather_event or '—' }}</td>
+              <td>{{ c.lost_hours }}h</td>
+              <td>₹{{ '%.0f'|format(c.predicted_loss) }}</td>
+              <td style="color:var(--teal);font-weight:600">{{ '₹'+'%.0f'|format(c.payout) if c.payout>0 else '—' }}</td>
+              <td>
+                {% set fs=(c.fraud_score or 0)*100 %}
+                <span style="color:{{ 'var(--teal)' if fs<35 else ('var(--gold)' if fs<65 else 'var(--danger)') }}">{{ fs|int }}%</span>
+              </td>
+              <td><span class="bp {{ 'bg' if c.status=='approved' else ('bo' if c.status=='review' else 'br') }}" style="font-size:.67rem">{{ c.status|upper }}</span></td>
+            </tr>
+            {% endfor %}
+          {% else %}
+          <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:2rem">No claims yet.</td></tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Fraud Ring Alerts -->
+  <div id="fraud-rings" class="gs-card mb-4" style="border-color:rgba(255,71,87,.3)">
+    <div class="sh" style="color:var(--danger)">🕵️ Fraud Ring Alerts
+      {% if fraud_rings %}<span class="bp br">{{ fraud_rings|length }} ring{% if fraud_rings|length!=1 %}s{% endif %} detected</span>{% endif %}
+    </div>
+    {% if fraud_rings %}
+    <div style="background:rgba(255,71,87,.06);border:1px solid rgba(255,71,87,.2);border-radius:10px;padding:.65rem 1rem;margin-bottom:.75rem;font-size:.81rem;color:var(--danger)">
+      🚨 These device IDs are shared across multiple worker accounts. All linked accounts have been flagged HIGH risk.
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Device ID</th><th>Accounts</th><th>Emails</th></tr></thead>
+        <tbody>
+          {% for ring in fraud_rings %}
+          <tr>
+            <td style="font-family:monospace;font-size:.76rem;color:var(--danger)">{{ ring.device_id[:20] }}…</td>
+            <td><span class="bp br">{{ ring.account_count }} accounts</span></td>
+            <td style="font-size:.74rem;color:var(--muted)">{{ ring.emails }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No fraud rings detected. ✅</div>
+    {% endif %}
+  </div>
+
+  <!-- Suspicious Workers -->
+  <div id="suspicious" class="gs-card mb-4" style="border-color:rgba(245,166,35,.3)">
+    <div class="sh" style="color:var(--gold)">⚠️ Suspicious Workers
+      {% if suspicious_workers %}<span class="bp bo">{{ suspicious_workers|length }} flagged</span>{% endif %}
+    </div>
+    {% if suspicious_workers %}
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Name</th><th>Email</th><th>Trust Score</th><th>Risk Label</th><th>Claim Status</th><th>Platform</th></tr></thead>
+        <tbody>
+          {% for w in suspicious_workers %}
+          <tr>
+            <td style="font-weight:500">{{ w.name }}</td>
+            <td style="font-size:.76rem">{{ w.email }}</td>
+            <td>
+              <div style="display:flex;align-items:center;gap:.5rem">
+                <div style="flex:1;height:6px;background:var(--s2);border-radius:999px;overflow:hidden">
+                  <div style="height:100%;width:{{ w.trust_score or 100 }}%;background:{{ 'var(--teal)' if (w.trust_score or 100)>=70 else ('var(--gold)' if (w.trust_score or 100)>=40 else 'var(--danger)') }};border-radius:999px"></div>
+                </div>
+                <span style="font-size:.78rem;font-weight:700;color:{{ 'var(--teal)' if (w.trust_score or 100)>=70 else ('var(--gold)' if (w.trust_score or 100)>=40 else 'var(--danger)') }}">{{ w.trust_score or 100 }}/100</span>
+              </div>
+            </td>
+            <td><span class="bp {{ 'bg' if w.risk_label=='LOW' else ('bo' if w.risk_label=='MEDIUM' else 'br') }}">{{ w.risk_label or 'LOW' }}</span></td>
+            <td><span class="bp {{ 'bg' if w.claim_status=='approved' else ('bo' if w.claim_status=='review' else ('br' if w.claim_status=='rejected' else 'bm')) }}" style="font-size:.68rem">{{ (w.claim_status or 'none')|upper }}</span></td>
+            <td><span class="bp {{ 'bo' if w.platform=='Zomato' else 'bg' }}" style="font-size:.7rem">{{ w.platform }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No suspicious workers. ✅</div>
+    {% endif %}
+  </div>
+
+  <!-- Fraud Event Log -->
+  <div id="fraud-log" class="gs-card mb-4">
+    <div class="sh">📋 Fraud Event Log <span style="font-size:.72rem;color:var(--muted);font-weight:400">(last 20 events)</span></div>
+    {% if fraud_logs %}
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>Time</th><th>Email</th><th>Event</th><th>Rule</th><th>ML</th><th>Risk</th><th>Trust</th><th>Reason</th></tr></thead>
+        <tbody>
+          {% for fl in fraud_logs %}
+          <tr>
+            <td style="font-size:.72rem;color:var(--muted)">{{ fl.logged_at[:16] }}</td>
+            <td style="font-size:.74rem">{{ fl.email }}</td>
+            <td>
+              <span class="bp {{ 'br' if fl.event_type in ('RULE_REJECT','ML_FRAUD','TRUST_LOW','FRAUD_RING') else ('bo' if fl.event_type=='SUSPICIOUS' else 'bm') }}" style="font-size:.67rem">
+                {{ fl.event_type }}
+              </span>
+            </td>
+            <td style="font-size:.73rem;color:var(--gold)">{{ fl.rule_status or '—' }}</td>
+            <td style="font-size:.73rem">
+              <span style="color:{{ 'var(--danger)' if fl.ml_label==1 else 'var(--teal)' }}">
+                {{ 'FRAUD' if fl.ml_label==1 else 'OK' }} ({{ (fl.ml_prob*100)|int }}%)
+              </span>
+            </td>
+            <td style="color:{{ 'var(--teal)' if fl.risk_score<0.35 else ('var(--gold)' if fl.risk_score<0.65 else 'var(--danger)') }};font-size:.76rem;font-weight:600">
+              {{ (fl.risk_score*100)|int }}%
+            </td>
+            <td style="font-size:.74rem">
+              <span style="color:{{ 'var(--danger)' if (fl.trust_score_after or 100)<40 else ('var(--gold)' if (fl.trust_score_after or 100)<70 else 'var(--teal)') }}">
+                {{ fl.trust_score_before }}→{{ fl.trust_score_after }}
+              </span>
+            </td>
+            <td style="font-size:.72rem;color:var(--muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+                title="{{ fl.reason }}">{{ (fl.reason or '—')[:60] }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No fraud events logged yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  setInterval(()=>document.getElementById('lt').textContent=new Date().toLocaleTimeString('en-IN'),1000);
+
+  // Countdown timers for pending payment deadlines
+  function updateCountdowns(){
+    document.querySelectorAll('[data-deadline]').forEach(el=>{
+      const dl=new Date(el.dataset.deadline+'Z');
+      const diff=dl-Date.now();
+      if(diff<=0){el.textContent='Expired';el.style.color='var(--danger)';return;}
+      const h=Math.floor(diff/3600000),m=Math.floor((diff%3600000)/60000);
+      el.textContent=h+'h '+m+'m left';
+      el.style.color=h<6?'var(--danger)':'var(--gold)';
+    });
+  }
+  updateCountdowns();
+  setInterval(updateCountdowns,60000);
+
+  Chart.defaults.color='#8b949e';Chart.defaults.font.family="'DM Sans',sans-serif";
+  const grid='rgba(48,54,61,0.8)';
+
+  new Chart(document.getElementById('ic'),{type:'line',data:{labels:{{ chart_hours|tojson }}.map(h=>h+'h'),datasets:[{label:'₹',data:{{ chart_losses|tojson }},borderColor:'#00c9a7',backgroundColor:'rgba(0,201,167,.08)',borderWidth:2.5,pointRadius:4,fill:true,tension:.3}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:grid}},y:{grid:{color:grid},ticks:{callback:v=>'₹'+v}}}}});
+
+  new Chart(document.getElementById('fc'),{type:'bar',data:{labels:['Claims/Week','GPS Variance','Distance','Daily Hrs','Login Freq','Weather'],datasets:[{data:[0.32,0.28,0.18,0.12,0.06,0.04],backgroundColor:['rgba(0,201,167,.75)','rgba(0,201,167,.6)','rgba(245,166,35,.7)','rgba(245,166,35,.5)','rgba(139,148,158,.6)','rgba(139,148,158,.5)'],borderRadius:6,borderWidth:0}]},options:{indexAxis:'y',responsive:true,plugins:{legend:{display:false}},scales:{x:{grid:{color:grid},ticks:{callback:v=>(v*100).toFixed(0)+'%'}},y:{grid:{color:'transparent'}}}}});
+</script>
+</body></html>

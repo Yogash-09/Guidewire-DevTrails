@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Dashboard — GigShield AI</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root{--bg:#0d1117;--s1:#161b22;--s2:#1c2333;--bd:#30363d;--teal:#00c9a7;--gold:#f5a623;--danger:#ff4757;--warn:#ffd32a;--text:#e6edf3;--muted:#8b949e;}
+  *{box-sizing:border-box}body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;margin:0}
+  .sidebar{width:240px;background:var(--s1);border-right:1px solid var(--bd);height:100vh;position:fixed;top:0;left:0;padding:1.25rem 1rem;display:flex;flex-direction:column;z-index:100}
+  .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;color:var(--text)}.logo span{color:var(--teal)}
+  .ni{display:flex;align-items:center;gap:.6rem;padding:.5rem .8rem;border-radius:10px;color:var(--muted);font-size:.85rem;font-weight:500;text-decoration:none;transition:all .15s;margin-bottom:.1rem}
+  .ni:hover,.ni.act{background:var(--s2);color:var(--text)}
+  .main{margin-left:240px;padding:1.5rem 2rem}
+  @media(max-width:768px){.sidebar{display:none}.main{margin-left:0;padding:1rem}}
+  .gs-card{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:1.25rem 1.5rem}
+  .sc{background:var(--s1);border:1px solid var(--bd);border-radius:14px;padding:1.1rem}
+  .sv{font-family:'Syne',sans-serif;font-size:1.6rem;font-weight:800}
+  .sb{display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .8rem;border-radius:999px;font-size:.75rem;font-weight:600}
+  .b-act{background:rgba(0,201,167,.15);color:var(--teal);border:1px solid rgba(0,201,167,.3)}
+  .b-off{background:rgba(255,71,87,.12);color:var(--danger);border:1px solid rgba(255,71,87,.3)}
+  .b-low{background:rgba(0,201,167,.12);color:var(--teal)}.b-med{background:rgba(245,166,35,.12);color:var(--gold)}.b-high{background:rgba(255,71,87,.12);color:var(--danger)}
+  .b-warn{background:rgba(245,166,35,.12);color:var(--gold)}
+  .risk-w{height:8px;background:var(--s2);border-radius:999px;overflow:hidden;margin:.5rem 0}
+  .risk-f{height:100%;border-radius:999px;transition:width 1s}
+  .w-chip{display:inline-flex;align-items:center;gap:.5rem;background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:.45rem .9rem;font-size:.82rem}
+  .w-chip.dis{border-color:rgba(255,71,87,.4);background:rgba(255,71,87,.06)}
+  .btn-claim{background:linear-gradient(135deg,var(--teal),#00a896);color:#fff;border:none;border-radius:999px;padding:.7rem 2rem;font-weight:700;font-size:.92rem;transition:transform .2s;cursor:pointer}
+  .btn-claim:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,201,167,.3)}
+  .btn-claim:disabled{opacity:.45;cursor:not-allowed;transform:none}
+  .tbl{width:100%;border-collapse:separate;border-spacing:0}
+  .tbl th{font-size:.7rem;color:var(--muted);font-weight:600;padding:.5rem .7rem;border-bottom:1px solid var(--bd);text-transform:uppercase;letter-spacing:.5px}
+  .tbl td{font-size:.8rem;padding:.55rem .7rem;border-bottom:1px solid var(--bd)}
+  .tbl tr:last-child td{border:none}
+  .chat-w{height:260px;overflow-y:auto;padding:.75rem;display:flex;flex-direction:column;gap:.5rem}
+  .bu{background:var(--teal);color:#0a0e1a;border-radius:14px 14px 4px 14px;padding:.55rem .85rem;max-width:80%;margin-left:auto;font-size:.83rem}
+  .bb{background:var(--s2);border:1px solid var(--bd);border-radius:14px 14px 14px 4px;padding:.55rem .85rem;max-width:85%;font-size:.83rem;white-space:pre-line}
+  .ci{flex:1;background:var(--s2);border:1px solid var(--bd);border-radius:999px;padding:.4rem .9rem;color:var(--text);font-size:.83rem;outline:none}
+  .ci:focus{border-color:var(--teal)}
+  .cs{background:var(--teal);border:none;border-radius:999px;padding:.4rem .9rem;color:#0a0e1a;font-weight:700;cursor:pointer}
+  .sh{font-family:'Syne',sans-serif;font-weight:700;font-size:.92rem;margin-bottom:.85rem}
+  .vstep{display:flex;align-items:center;gap:.6rem;padding:.45rem 0;border-bottom:1px solid var(--bd)}
+  .vstep:last-child{border:none}
+  .vstep-icon{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0}
+  .vi-done{background:rgba(0,201,167,.15)}.vi-pending{background:rgba(245,166,35,.12)}.vi-todo{background:var(--s2)}
+  .toast-c{position:fixed;bottom:1.5rem;right:1.5rem;z-index:9999;display:flex;flex-direction:column;gap:.5rem}
+  .gs-t{background:var(--s2);border:1px solid var(--bd);border-radius:12px;padding:.75rem 1.2rem;font-size:.82rem;max-width:340px;box-shadow:0 8px 24px rgba(0,0,0,.3);animation:su .3s ease}
+  @keyframes su{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .gs-t.success{border-color:rgba(0,201,167,.4);color:var(--teal)}.gs-t.danger{border-color:rgba(255,71,87,.4);color:var(--danger)}.gs-t.warning{border-color:rgba(245,166,35,.4);color:var(--gold)}
+  .alert{border-radius:10px;font-size:.85rem}
+  .exp-a{background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.3);border-radius:10px;padding:.65rem 1rem;font-size:.81rem;color:var(--gold);margin-bottom:.75rem}
+</style>
+</head>
+<body>
+<div class="sidebar">
+  <div class="logo mb-4">Gig<span>Shield</span> AI</div>
+  <a href="{{ url_for('user.dashboard') if session.get('role')=='user' else url_for('worker_dashboard') }}" class="ni act">🏠 Dashboard</a>
+  <a href="#vstatus" class="ni">✅ Verification</a>
+  <a href="#claims" class="ni">📋 My Claims</a>
+  <a href="#sub" class="ni">🗓️ Subscription</a>
+  <a href="#chat" class="ni">🤖 AI Assistant</a>
+  <div style="margin-top:auto">
+    <div style="padding:.55rem .8rem;border-radius:10px;background:var(--s2);margin-bottom:.65rem">
+      <div style="font-size:.73rem;color:var(--muted)">Logged in as</div>
+      <div style="font-size:.86rem;font-weight:600">{{ worker.name }}</div>
+      <div style="font-size:.72rem;color:var(--teal)">{{ worker.phone_number or worker.email }}</div>
+    </div>
+    <a href="{{ url_for('user.logout') if session.get('role')=='user' else url_for('logout') }}" class="ni" style="color:var(--danger)">🚪 Log Out</a>
+  </div>
+</div>
+
+<div class="main">
+  <!-- Mobile menu -->
+  <div class="d-flex d-md-none justify-content-between align-items-center mb-3">
+    <div class="logo">Gig<span>Shield</span> AI</div>
+  </div>
+
+  {% with msgs=get_flashed_messages(with_categories=true) %}
+    {% for cat,msg in msgs %}
+    <div class="alert alert-{{cat}} alert-dismissible fade show">{{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if expiry_warning %}
+  <div class="exp-a">⚠️ Subscription expires in <strong>{{ days_left }} day{% if days_left!=1 %}s{% endif %}</strong>. <a href="/payment" style="color:var(--gold);font-weight:600">Renew →</a></div>
+  {% endif %}
+
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+      <h1 style="font-family:'Syne',sans-serif;font-weight:800;font-size:1.45rem;margin:0">Hello, {{ worker.name.split()[0] }} 👋</h1>
+      <div style="font-size:.81rem;color:var(--muted)">{{ worker.city }} · {{ worker.platform }} <span style="color:var(--gold);font-size:.68rem">(self-declared)</span></div>
+    </div>
+    <div class="sb {{ 'b-act' if is_active else 'b-off' }}">{{ '✅ Active' if is_active else '❌ Inactive' }}</div>
+  </div>
+
+  <!-- Stats -->
+  <div class="row g-3 mb-4">
+    {% for icon,lbl,val,col in [('💰','Weekly Premium','₹'+worker.premium|int|string,'var(--teal)'),('🛡️','Coverage','₹'+worker.coverage|int|string,'var(--text)'),('📅','Days Left',days_left|string,('var(--warn)' if days_left<=2 else 'var(--text)')),('🤖','ML 3hr Est.','₹'+predicted_loss|int|string,'var(--gold)')] %}
+    <div class="col-6 col-md-3"><div class="sc"><div style="font-size:.74rem;color:var(--muted);margin-bottom:.25rem">{{ icon }} {{ lbl }}</div><div class="sv" style="color:{{ col }}">{{ val }}</div></div></div>
+    {% endfor %}
+  </div>
+
+  <!-- Verification Status -->
+  <div id="vstatus" class="gs-card mb-4">
+    <div class="sh">✅ Verification Status</div>
+    <div>
+      <!-- Step 1: Email OTP -->
+      <div class="vstep">
+        <div class="vstep-icon {{ 'vi-done' if vstatus.email_verified else 'vi-pending' }}">
+          {{ '✓' if vstatus.email_verified else '⏳' }}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.84rem;font-weight:600">Email Verification</div>
+          <div style="font-size:.73rem;color:var(--muted)">Proves you own this email address</div>
+        </div>
+        <span class="sb {{ 'b-act' if vstatus.email_verified else 'b-warn' }}">{{ 'Verified ✓' if vstatus.email_verified else 'Pending' }}</span>
+      </div>
+      <!-- Step 2: Platform (always self-declared) -->
+      <div class="vstep">
+        <div class="vstep-icon vi-pending">⚠️</div>
+        <div style="flex:1">
+          <div style="font-size:.84rem;font-weight:600">Platform Affiliation — {{ worker.platform }}</div>
+          <div style="font-size:.73rem;color:var(--gold)">Self-declared · Not verified against Swiggy/Zomato API (no public API available)</div>
+        </div>
+        <span class="sb b-warn">Self-Declared</span>
+      </div>
+      <!-- Step 3: Documents -->
+      <div class="vstep">
+        <div class="vstep-icon {{ 'vi-done' if vstatus.doc_status=='approved' else ('vi-pending' if vstatus.doc_status=='pending' else ('vi-todo' if vstatus.doc_status=='not_uploaded' else 'vi-pending')) }}">
+          {{ '✓' if vstatus.doc_status=='approved' else ('⏳' if vstatus.doc_status=='pending' else ('📄' if vstatus.docs_uploaded else '📁')) }}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.84rem;font-weight:600">Document Proof</div>
+          <div style="font-size:.73rem;color:var(--muted)">ID card + delivery app screenshot reviewed by admin</div>
+        </div>
+        {% if vstatus.doc_status == 'approved' %}
+        <span class="sb b-act">Approved ✓</span>
+        {% elif vstatus.doc_status == 'pending' %}
+        <span class="sb b-warn">Under Review</span>
+        {% elif vstatus.doc_status == 'rejected' %}
+        <span class="sb b-high">Rejected</span>
+        {% else %}
+        <a href="/upload-docs" class="sb" style="background:var(--teal);color:#0a0e1a;text-decoration:none">Upload Now →</a>
+        {% endif %}
+      </div>
+      <!-- Step 4: Admin verification -->
+      <div class="vstep">
+        <div class="vstep-icon {{ 'vi-done' if vstatus.doc_status=='approved' else 'vi-todo' }}">
+          {{ '✓' if vstatus.doc_status=='approved' else '👤' }}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.84rem;font-weight:600">Admin Approval</div>
+          <div style="font-size:.73rem;color:var(--muted)">Platform admin reviews documents and approves claim eligibility</div>
+        </div>
+        <span class="sb {{ 'b-act' if vstatus.doc_status=='approved' else 'b-warn' if vstatus.doc_status=='pending' else 'b-off' if vstatus.doc_status=='rejected' else 'bm' }}">
+          {{ 'Verified by Admin ✓' if vstatus.doc_status=='approved' else ('Pending Review' if vstatus.doc_status=='pending' else ('Rejected' if vstatus.doc_status=='rejected' else 'Not Started')) }}
+        </span>
+      </div>
+      <!-- Step 5: Payment -->
+      <div class="vstep">
+        <div class="vstep-icon {{ 'vi-done' if vstatus.payment_done else 'vi-pending' }}">
+          {{ '✓' if vstatus.payment_done else '💳' }}
+        </div>
+        <div style="flex:1">
+          <div style="font-size:.84rem;font-weight:600">Subscription Payment</div>
+          <div style="font-size:.73rem;color:var(--muted)">
+            {% set ps = worker.payment_status | upper %}
+            {% if ps == 'SUCCESS' %}Active — expires {{ worker.subscription_end[:10] if worker.subscription_end else '—' }}
+            {% elif ps == 'EXPIRED' %}Payment window expired
+            {% else %}Complete payment before deadline to activate coverage{% endif %}
+          </div>
+        </div>
+        {% set ps = worker.payment_status | upper %}
+        {% if ps == 'SUCCESS' %}
+          <span class="sb b-act">Active ✓</span>
+        {% elif ps == 'EXPIRED' %}
+          <span class="sb b-off">Expired</span>
+        {% else %}
+          <a href="/payment" class="sb" style="background:var(--gold);color:#0a0e1a;text-decoration:none">Pay Now →</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if vstatus.doc_status == 'rejected' %}
+    <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem .9rem;font-size:.79rem;color:var(--danger);margin-top:.75rem">
+      ❌ Your documents were rejected. <a href="/upload-docs" style="color:var(--danger);font-weight:600">Re-upload documents →</a>
+    </div>
+    {% elif not vstatus.docs_uploaded %}
+    <div style="background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);border-radius:8px;padding:.6rem .9rem;font-size:.79rem;color:var(--gold);margin-top:.75rem">
+      📄 Upload your ID card and delivery app screenshot to unlock full claim eligibility. <a href="/upload-docs" style="color:var(--gold);font-weight:600">Upload now →</a>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Weather + Risk + Claim -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="gs-card h-100">
+        <div class="sh">🌤️ Weather — {{ worker.city }}</div>
+        <div class="w-chip {{ 'dis' if weather.is_disrupted else '' }} mb-3">
+          <span style="font-size:1.1rem">{{ '🌧️' if weather.is_disrupted else '☀️' }}</span>
+          <div><div style="font-weight:600;font-size:.85rem">{{ weather.condition }}</div><div style="font-size:.72rem;color:var(--muted)">{{ weather.temperature }}°C · {{ weather.source }}</div></div>
+        </div>
+        {% if weather.is_disrupted %}
+        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.55rem .8rem;font-size:.78rem;color:#ff6b7a">⚠️ Disruption detected — you may be eligible to file a claim.</div>
+        {% else %}
+        <div style="font-size:.78rem;color:var(--muted)">No disruption right now. Stay safe on the road!</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="gs-card h-100">
+        <div class="sh">🛡️ Fraud Risk Score</div>
+        <div style="text-align:center;padding:.5rem 0 .25rem">
+          <div class="sv" style="font-size:2.6rem;color:{{ 'var(--teal)' if risk_label=='LOW' else ('var(--gold)' if risk_label=='MEDIUM' else 'var(--danger)') }}">
+            {{ (risk_score*100)|int }}
+          </div>
+          <div style="font-size:.73rem;color:var(--muted)">ML + rule score /100</div>
+        </div>
+        <div class="risk-w"><div class="risk-f" style="width:{{ (risk_score*100)|int }}%;background:{{ 'var(--teal)' if risk_label=='LOW' else ('var(--gold)' if risk_label=='MEDIUM' else 'var(--danger)') }}"></div></div>
+        <div class="d-flex justify-content-between mt-1">
+          <span class="sb b-{{ risk_label|lower }}">{{ risk_label }} RISK</span>
+          <span style="font-size:.71rem;color:var(--muted)">{{ fraud_data.confidence }}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-4">
+      <div class="gs-card h-100 d-flex flex-column">
+        <div class="sh">⚡ File a Claim</div>
+        {% if not is_active %}
+        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem;font-size:.79rem;color:var(--danger);margin-bottom:.65rem">
+          {% if worker.payment_status | upper == 'PENDING' %}
+            ⏳ Payment pending. <a href="/payment" style="color:var(--danger);font-weight:600">Complete payment →</a>
+          {% elif worker.payment_status | upper == 'EXPIRED' %}
+            ❌ Payment window expired. <a href="/register" style="color:var(--danger);font-weight:600">Re-subscribe →</a>
+          {% else %}
+            ❌ No subscription. <a href="/payment" style="color:var(--danger);font-weight:600">Renew →</a>
+          {% endif %}
+        </div>
+        {% endif %}
+        {% if vstatus.doc_status == 'pending' %}
+        <div style="background:rgba(245,166,35,.08);border:1px solid rgba(245,166,35,.2);border-radius:8px;padding:.6rem;font-size:.79rem;color:var(--gold);margin-bottom:.65rem">⏳ Documents under review. Claims enabled after admin approval.</div>
+        {% elif vstatus.doc_status == 'rejected' %}
+        <div style="background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.2);border-radius:8px;padding:.6rem;font-size:.79rem;color:var(--danger);margin-bottom:.65rem">❌ Documents rejected. <a href="/upload-docs" style="color:var(--danger)">Re-upload →</a></div>
+        {% endif %}
+        <div class="mb-3">
+          <label style="font-size:.76rem;color:var(--muted);display:block;margin-bottom:.25rem">Estimated lost hours</label>
+          <input type="range" id="hrs" min="0.5" max="10" step="0.5" value="3" style="width:100%;accent-color:var(--teal)" oninput="updEst()"/>
+          <div class="d-flex justify-content-between" style="font-size:.71rem;color:var(--muted)"><span>0.5h</span><span id="hrsLbl" style="color:var(--teal);font-weight:600">3h</span><span>10h</span></div>
+        </div>
+        <div style="background:var(--s2);border-radius:8px;padding:.6rem;margin-bottom:.65rem">
+          <div style="font-size:.73rem;color:var(--muted)">ML Predicted Payout</div>
+          <div style="font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;color:var(--teal)" id="estPay">₹270</div>
+        </div>
+        <button class="btn-claim mt-auto" id="claimBtn" {{ 'disabled' if not is_active else '' }} onclick="triggerClaim()">
+          {{ '🔒 Subscription Required' if not is_active else '⚡ Trigger Claim' }}
+        </button>
+        <div id="claimMsg" class="mt-1" style="font-size:.75rem;color:var(--muted)"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Claims -->
+  <div id="claims" class="gs-card mb-4">
+    <div class="sh">📋 Claim History</div>
+    {% if claims %}
+    <div style="overflow-x:auto">
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Date</th><th>Event</th><th>Hrs</th><th>Payout</th><th>Fraud%</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for c in claims %}
+          <tr>
+            <td style="color:var(--muted)">#{{ c.id }}</td>
+            <td>{{ c.claim_date[:10] }}</td>
+            <td>{{ c.weather_event or '—' }}</td>
+            <td>{{ c.lost_hours }}h</td>
+            <td style="color:var(--teal);font-weight:600">{{ '₹'+('%.0f'|format(c.payout)) if c.payout>0 else '—' }}</td>
+            <td style="color:{{ 'var(--teal)' if c.fraud_score<0.35 else ('var(--gold)' if c.fraud_score<0.65 else 'var(--danger)') }}">{{ (c.fraud_score*100)|int }}%</td>
+            <td><span class="sb {{ 'b-act' if c.status=='approved' else ('b-med' if c.status=='review' else 'b-off') }}" style="font-size:.69rem">{{ c.status|upper }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:1.5rem;color:var(--muted);font-size:.84rem">No claims yet. Claims appear here after a weather disruption.</div>
+    {% endif %}
+  </div>
+
+  <!-- Subscription -->
+  <div id="sub" class="gs-card mb-4">
+    <div class="sh">🗓️ Subscription</div>
+    <div class="row g-3">
+      {% set ps = worker.payment_status | upper %}
+      {% for lbl,val in [('Platform',worker.platform+' (self-declared)'),('Status', ps),('Start',worker.subscription_start[:10] if worker.subscription_start else '—'),('End',worker.subscription_end[:10] if worker.subscription_end else '—'),('Days Left',days_left),('Deadline',worker.payment_deadline[:16]|replace('T',' ')+' UTC' if worker.payment_deadline else '—')] %}
+      <div class="col-md-3"><div style="font-size:.73rem;color:var(--muted)">{{ lbl }}</div>
+        <div style="font-weight:600;font-size:.9rem;color:{{ 'var(--teal)' if (lbl=='Status' and val=='SUCCESS') else ('var(--gold)' if (lbl=='Status' and val=='PENDING') else ('var(--danger)' if (lbl=='Status' and val=='EXPIRED') else 'inherit')) }}">{{ val }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% if ps == 'PENDING' %}
+    <div class="mt-3" style="font-size:.8rem;color:var(--gold)">⏳ Complete payment before deadline to activate coverage.</div>
+    <div class="mt-2"><a href="/payment" class="btn-claim" style="display:inline-block;text-decoration:none;padding:.55rem 1.5rem">💳 Pay Now</a></div>
+    {% elif not is_active %}
+    <div class="mt-3"><a href="/payment" class="btn-claim" style="display:inline-block;text-decoration:none;padding:.55rem 1.5rem">🔄 Renew</a></div>
+    {% endif %}
+  </div>
+
+  <!-- Chatbot -->
+  <div id="chat" class="gs-card mb-4">
+    <div class="sh">🤖 GigShield AI Assistant</div>
+    <div class="chat-w" id="cw">
+      <div class="bb">👋 Hello <strong>{{ worker.name.split()[0] }}</strong>! Ask me about your premium, claims, verification, or subscription.</div>
+    </div>
+    <div style="display:flex;gap:.5rem;padding:.65rem;border-top:1px solid var(--bd)">
+      <input class="ci" id="ci" placeholder="Ask anything…" onkeydown="if(event.key==='Enter')sendChat()"/>
+      <button class="cs" onclick="sendChat()">Send</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;padding:.35rem .65rem">
+      {% for q in ['How do I claim?','What is my premium?','How is fraud detected?','Why upload documents?'] %}
+      <button onclick="qc('{{q}}')" style="background:var(--s2);border:1px solid var(--bd);border-radius:999px;padding:.15rem .65rem;font-size:.71rem;color:var(--muted);cursor:pointer">{{ q }}</button>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="toast-c" id="tc"></div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+async function updEst(){const h=parseFloat(document.getElementById('hrs').value);document.getElementById('hrsLbl').textContent=h+'h';try{const r=await fetch('/api/income-predict?hours='+h);const d=await r.json();document.getElementById('estPay').textContent='₹'+Math.round(d.predicted_loss);}catch{document.getElementById('estPay').textContent='₹'+Math.round(h*90);}}
+async function triggerClaim(){const btn=document.getElementById('claimBtn');btn.disabled=true;btn.textContent='⏳ Processing…';const h=parseFloat(document.getElementById('hrs').value);const fd=new FormData();fd.append('lost_hours',h);fd.append('gps_variance','55');fd.append('distance_km','80');fd.append('login_frequency','2');fd.append('avg_daily_hours','6');const claimUrl='{{ url_for("user.trigger_claim") if session.get("role")=="user" else url_for("trigger_claim") }}';try{const r=await fetch(claimUrl,{method:'POST',body:fd});const d=await r.json();toast(d.message,d.status==='approved'?'success':(d.status==='rejected'?'danger':'warning'));document.getElementById('claimMsg').textContent=d.message;setTimeout(()=>location.reload(),2500);}catch{toast('❌ Network error.','danger');btn.disabled=false;btn.textContent='⚡ Trigger Claim';}}
+async function sendChat(){const inp=document.getElementById('ci');const msg=inp.value.trim();if(!msg)return;inp.value='';appendChat(msg,'u');try{const r=await fetch('/chatbot',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});const d=await r.json();appendChat(d.reply,'b');}catch{appendChat('⚠️ Connection issue.','b');}}
+function qc(q){document.getElementById('ci').value=q;sendChat();}
+function appendChat(t,r){const w=document.getElementById('cw');const d=document.createElement('div');d.className=r==='u'?'bu':'bb';d.textContent=t;w.appendChild(d);w.scrollTop=w.scrollHeight;}
+function toast(m,t='success'){const c=document.getElementById('tc');const el=document.createElement('div');el.className='gs-t '+t;el.textContent=m;c.appendChild(el);setTimeout(()=>el.remove(),5000);}
+updEst();
+</script>
+</body></html>
