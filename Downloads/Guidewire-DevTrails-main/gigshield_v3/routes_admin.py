@@ -43,7 +43,7 @@ def login():
 @admin_bp.route("/logout")
 def logout():
     session.clear()
-    return redirect(url_for("role_select"))
+    return redirect(url_for("admin.login"))
 
 
 # ── Dashboard ─────────────────────────────────────────────────────

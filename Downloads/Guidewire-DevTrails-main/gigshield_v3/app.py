@@ -1,11 +1,18 @@
 """
 GigShield AI — app.py
 =======================
-Entry point: app init + blueprint registration only.
-All route logic lives in routes_user.py and routes_admin.py.
+Single Flask app. One server, one port.
+
+  /user/*   → routes_user.py  (worker-facing)
+  /admin/*  → routes_admin.py (admin-facing)
+
+Run:  python app.py
 """
 
 import os
+from functools import wraps
+from datetime import datetime, timedelta
+import threading
 
 try:
     from dotenv import load_dotenv
@@ -13,100 +20,43 @@ try:
 except ImportError:
     pass
 
-from flask import Flask, render_template, redirect, url_for, jsonify, request
+from flask import (Flask, render_template, redirect, url_for,
+                   request, session, flash, jsonify)
 
-from database import init_db
+from database import (
+    init_db, get_pending_payment_workers,
+    worker_exists_by_email, create_worker, get_worker_by_email,
+    update_otp, verify_otp_db, activate_subscription,
+    subscription_active, days_remaining, save_doc_paths,
+)
 from ml_model import ensure_models_trained, predict_income_loss
 from weather_service import get_weather
 from chatbot import get_response
 from qr_generator import generate_qr
-from database import (
-    worker_exists_by_email, create_worker, get_worker_by_email,
-    update_otp, verify_otp_db, activate_subscription,
-    subscription_active, days_remaining, save_doc_paths,
-    get_pending_payment_workers,
-)
 from otp_service import send_otp, generate_otp, send_email
-
-from routes_user  import user_bp
+from routes_user import user_bp
 from routes_admin import admin_bp
+
+# ── App ───────────────────────────────────────────────────────────
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "gigshield-dev-2024!")
 
-os.makedirs(os.path.join(os.path.dirname(__file__), "static", "uploads"), exist_ok=True)
+UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "uploads")
+ALLOWED_EXT   = {"png", "jpg", "jpeg", "gif", "pdf", "webp"}
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 with app.app_context():
     init_db()
     ensure_models_trained()
 
 # ── Blueprints ────────────────────────────────────────────────────
+# /user/*  — worker-facing routes
+# /admin/* — admin-facing routes
 app.register_blueprint(user_bp)
 app.register_blueprint(admin_bp)
 
-# ── Block admin routes on port 5000 ─────────────────────────────
-
-@app.before_request
-def _block_admin_on_worker_port():
-    from flask import request, abort
-    # Check actual bound port from the socket environ
-    port = str(request.environ.get("SERVER_PORT", ""))
-    if port == "5000" and request.path.startswith("/admin"):
-        abort(404)
-
-
-@app.before_request
-def _check_payment_reminders():
-    """Periodic reminder: runs on each request but throttled by a simple in-process set."""
-    from datetime import datetime, timedelta
-    import threading
-    _lock = getattr(_check_payment_reminders, "_lock", None)
-    if _lock is None:
-        _check_payment_reminders._lock = threading.Lock()
-        _check_payment_reminders._last_run = None
-    with _check_payment_reminders._lock:
-        now = datetime.utcnow()
-        last = _check_payment_reminders._last_run
-        if last and (now - last).total_seconds() < 3600:  # run at most once per hour
-            return
-        _check_payment_reminders._last_run = now
-
-    for w in get_pending_payment_workers():
-        try:
-            deadline = datetime.fromisoformat(w["payment_deadline"])
-        except Exception:
-            continue
-        now = datetime.utcnow()
-        if now >= deadline:
-            send_email(
-                w["email"],
-                "Subscription Expired — GigShield AI",
-                "Your payment window has expired. Please re-subscribe to continue coverage."
-            )
-        elif now >= deadline - timedelta(hours=6):
-            send_email(
-                w["email"],
-                "Payment Reminder — GigShield AI",
-                "Your subscription payment is pending. Please complete payment within the allowed time to activate coverage."
-            )
-
-# ── Shared / legacy routes ────────────────────────────────────────
-
-@app.route("/")
-def role_select():
-    return render_template("role.html")
-
-@app.route("/terms")
-def terms():
-    return render_template("terms.html")
-
-# Legacy register / OTP / payment flow (email-based onboarding)
-# kept intact so existing workers are not broken
-from functools import wraps
-from flask import session, flash
-
-UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), "static", "uploads")
-ALLOWED_EXT   = {"png", "jpg", "jpeg", "gif", "pdf", "webp"}
+# ── Helpers ───────────────────────────────────────────────────────
 
 def _allowed_file(filename):
     return "." in filename and filename.rsplit(".", 1)[1].lower() in ALLOWED_EXT
@@ -125,19 +75,57 @@ def _login_required(f):
         return f(*a, **k)
     return w
 
+# ── Payment reminder (throttled, once per hour) ───────────────────
+
+_reminder_lock     = threading.Lock()
+_reminder_last_run = None
+
+@app.before_request
+def _check_payment_reminders():
+    global _reminder_last_run
+    with _reminder_lock:
+        now = datetime.utcnow()
+        if _reminder_last_run and (now - _reminder_last_run).total_seconds() < 3600:
+            return
+        _reminder_last_run = now
+    for w in get_pending_payment_workers():
+        try:
+            deadline = datetime.fromisoformat(w["payment_deadline"])
+        except Exception:
+            continue
+        now = datetime.utcnow()
+        if now >= deadline:
+            send_email(w["email"], "Subscription Expired — GigShield AI",
+                       "Your payment window has expired. Please re-subscribe.")
+        elif now >= deadline - timedelta(hours=6):
+            send_email(w["email"], "Payment Reminder — GigShield AI",
+                       "Your subscription payment is pending. Please complete it soon.")
+
+# ── Root & shared pages ───────────────────────────────────────────
+
+@app.route("/")
+def role_select():
+    return render_template("role.html")
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+# ── Worker onboarding flow (/register → /verify_otp → /upload-docs → /payment) ──
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "GET":
         return render_template("register.html")
-    name     = request.form.get("name", "").strip()
-    city     = request.form.get("city", "").strip()
-    platform = request.form.get("platform", "").strip()
-    ref_id   = request.form.get("worker_ref_id", "").strip()
-    email    = request.form.get("email", "").strip().lower()
+    name      = request.form.get("name", "").strip()
+    city      = request.form.get("city", "").strip()
+    platform  = request.form.get("platform", "").strip()
+    ref_id    = request.form.get("worker_ref_id", "").strip()
+    email     = request.form.get("email", "").strip().lower()
     device_id = request.form.get("device_id", "").strip()
     errors = []
-    if not name:  errors.append("Full name is required.")
-    if not city:  errors.append("City is required.")
+    if not name:     errors.append("Full name is required.")
+    if not city:     errors.append("City is required.")
     if not platform: errors.append("Please select your platform.")
     if not email or "@" not in email: errors.append("Valid email is required.")
     if not errors and worker_exists_by_email(email):
@@ -150,20 +138,18 @@ def register():
     otp    = generate_otp()
     update_otp(email, otp)
     result = send_otp(email, otp, worker_id=email, name=name)
-    session["reg_email"]  = email
-    session["debug_otp"]  = result.get("debug_otp", "")
-    flash("OTP sent. Check your inbox or terminal.", "success" if result["channel"] == "email" else "info")
+    session["reg_email"] = email
+    session["debug_otp"] = result.get("debug_otp", "")
+    flash("OTP sent. Check your inbox or terminal.",
+          "success" if result["channel"] == "email" else "info")
     return redirect(url_for("verify_otp_route"))
 
 @app.route("/send_otp", methods=["POST"])
 def send_otp_route():
-    from flask import jsonify
     email = session.get("reg_email", "")
-    if not email:
-        return jsonify({"error": "No email in session"}), 400
+    if not email: return jsonify({"error": "No email in session"}), 400
     w = get_worker_by_email(email)
-    if not w:
-        return jsonify({"error": "Worker not found"}), 404
+    if not w: return jsonify({"error": "Worker not found"}), 404
     otp    = generate_otp()
     update_otp(email, otp)
     result = send_otp(email, otp, worker_id=email, name=w["name"])
@@ -175,22 +161,20 @@ def send_otp_route():
 @app.route("/verify_otp", methods=["GET", "POST"])
 def verify_otp_route():
     email = session.get("reg_email", "")
-    if not email:
-        return redirect(url_for("register"))
+    if not email: return redirect(url_for("register"))
     if request.method == "POST":
-        entered = request.form.get("otp", "").strip()
-        if verify_otp_db(email, entered):
+        if verify_otp_db(email, request.form.get("otp", "").strip()):
             session.pop("debug_otp", None)
             flash("Email verified! Now upload your documents.", "success")
             return redirect(url_for("upload_docs"))
         flash("Incorrect OTP. Try again.", "danger")
-    return render_template("verify_otp.html", email=email, debug_otp=session.get("debug_otp", ""))
+    return render_template("verify_otp.html", email=email,
+                           debug_otp=session.get("debug_otp", ""))
 
 @app.route("/upload-docs", methods=["GET", "POST"])
 def upload_docs():
     email = session.get("reg_email", "")
-    if not email:
-        return redirect(url_for("register"))
+    if not email: return redirect(url_for("register"))
     w = get_worker_by_email(email)
     if not w or not w["email_verified"]:
         flash("Verify your email first.", "warning")
@@ -218,29 +202,24 @@ def upload_docs():
 @app.route("/payment")
 def payment():
     email = session.get("reg_email", "")
-    if not email:
-        return redirect(url_for("register"))
+    if not email: return redirect(url_for("register"))
     w = get_worker_by_email(email)
-    if not w or not w["email_verified"]:
-        return redirect(url_for("verify_otp_route"))
+    if not w or not w["email_verified"]: return redirect(url_for("verify_otp_route"))
     qr = generate_qr(float(w["premium"]), str(w["id"]))
     return render_template("payment.html", worker=dict(w), qr_file=qr)
 
 @app.route("/payment/confirm", methods=["POST"])
 def payment_confirm():
     email = session.get("reg_email", "") or session.get("worker_email", "")
-    if not email:
-        return redirect(url_for("register"))
+    if not email: return redirect(url_for("register"))
     result = activate_subscription(email)
     if result["result"] == "SUCCESS":
         session["worker_email"] = email
         session.pop("reg_email", None)
         flash("🎉 Payment confirmed! Subscription activated for 7 days.", "success")
         return redirect(url_for("worker_dashboard"))
-    else:
-        flash("❌ Payment window expired. Please re-register to get a new payment window.", "danger")
-        return redirect(url_for("payment"))
-
+    flash("❌ Payment window expired. Please re-register.", "danger")
+    return redirect(url_for("payment"))
 
 @app.route("/payment/skip")
 def payment_skip():
@@ -248,8 +227,10 @@ def payment_skip():
     if email:
         session["worker_email"] = email
         session.pop("reg_email", None)
-    flash("⏳ Payment skipped. Complete it before your deadline to activate coverage.", "info")
+    flash("⏳ Payment skipped. Complete it before your deadline.", "info")
     return redirect(url_for("worker_dashboard"))
+
+# ── Worker login / logout / dashboard ────────────────────────────
 
 @app.route("/login", methods=["GET", "POST"])
 def worker_login():
@@ -264,6 +245,7 @@ def worker_login():
             flash("Please complete email verification first.", "warning")
             return redirect(url_for("verify_otp_route"))
         session["worker_email"] = email
+        session["role"] = "user"
         return redirect(url_for("worker_dashboard"))
     return render_template("worker_login.html")
 
@@ -272,40 +254,30 @@ def logout():
     session.clear()
     return redirect(url_for("role_select"))
 
-@app.route("/claim/trigger", methods=["POST"])
-def trigger_claim():
-    """Legacy claim route — redirects to user blueprint if role=user, else handles inline."""
-    if session.get("role") == "user":
-        from routes_user import trigger_claim as _uc
-        return _uc()
-    # Legacy email-session path
-    if "worker_email" not in session:
-        return jsonify({"error": "Not logged in"}), 403
-    # Temporarily bridge: set user_id from email so blueprint handler works
-    from database import get_worker_by_email as _gwe
-    w = _gwe(session["worker_email"])
-    if not w:
-        return jsonify({"error": "Worker not found"}), 404
-    session["user_id"] = w["id"]
-    session["role"] = "user"
-    from routes_user import trigger_claim as _uc
-    return _uc()
-
-
 @app.route("/dashboard")
 @_login_required
 def worker_dashboard():
-    # Legacy email-session path: bridge into user blueprint
-    from database import get_worker_by_email as _gwe
-    w = _gwe(session["worker_email"])
+    w = get_worker_by_email(session["worker_email"])
     if not w:
         session.clear()
         return redirect(url_for("role_select"))
     session["user_id"] = w["id"]
-    session["role"] = "user"
+    session["role"]    = "user"
     return redirect(url_for("user.home"))
 
-# ── Chatbot & utility APIs ────────────────────────────────────────
+@app.route("/claim/trigger", methods=["POST"])
+def trigger_claim():
+    if "worker_email" not in session:
+        return jsonify({"error": "Not logged in"}), 403
+    w = get_worker_by_email(session["worker_email"])
+    if not w:
+        return jsonify({"error": "Worker not found"}), 404
+    session["user_id"] = w["id"]
+    session["role"]    = "user"
+    from routes_user import trigger_claim as _uc
+    return _uc()
+
+# ── Shared APIs ───────────────────────────────────────────────────
 
 @app.route("/chatbot", methods=["POST"])
 def chatbot():
@@ -331,7 +303,11 @@ def not_found(_):
 def server_error(e):
     return jsonify({"error": str(e)}), 500
 
+# ── Entry point ───────────────────────────────────────────────────
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    print(f"App running on PORT {port}")
-    app.run(host="0.0.0.0", port=port)
+    print(f"GigShield AI → http://localhost:{port}")
+    print(f"  Worker UI  → http://localhost:{port}/user/login")
+    print(f"  Admin UI   → http://localhost:{port}/admin/login")
+    app.run(debug=True, host="0.0.0.0", port=port)
